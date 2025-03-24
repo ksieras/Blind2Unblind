@@ -27,7 +27,7 @@ parser.add_argument("--noisetype", type=str, default="gauss25", choices=['gauss2
 parser.add_argument('--resume', type=str)
 parser.add_argument('--checkpoint', type=str)
 parser.add_argument('--data_dir', type=str,
-                    default='./dataset/fmdd_sub/train')
+                    default='./dataset/train')
 parser.add_argument('--val_dirs', type=str, default='./dataset/fmdd_sub/validation')
 parser.add_argument('--subfold', type=str, required=True, 
                        choices=['Confocal_FISH','Confocal_MICE','TwoPhoton_MICE'])
@@ -402,6 +402,7 @@ class DataLoader_Fmdd_sub(Dataset):
         super(DataLoader_Fmdd_sub, self).__init__()
         self.data_dir = data_dir
         self.patch = patch
+        print("data_dir===",data_dir)
         # self.train_fns = glob.glob(os.path.join(data_dir, '**/raw/**/**.png'), recursive=True)
         self.train_fns = glob.glob(os.path.join(data_dir, opt.subfold, 'raw/**/**.png'), recursive=True)        
         self.train_fns.sort()
@@ -660,7 +661,7 @@ for epoch in range(epoch_init, opt.n_epoch + 1):
         loss_reg = alpha * torch.mean(diff**2)
         loss_rev = torch.mean(revisible**2)
         loss_all = loss_reg + loss_rev
-
+         
         loss_all.backward()
         optimizer.step()
         logger.info(
@@ -672,6 +673,7 @@ for epoch in range(epoch_init, opt.n_epoch + 1):
 
     if epoch % opt.n_snapshot == 0 or epoch == opt.n_epoch:
         network.eval()
+        print("enter eval ----------")
         # save checkpoint
         save_network(network, epoch, "model")
         save_state(epoch, optimizer, scheduler)
