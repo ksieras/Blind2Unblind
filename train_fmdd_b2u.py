@@ -6,7 +6,6 @@ import glob
 import datetime
 import argparse
 import numpy as np
-from matplotlib import pyplot as plt
 from scipy.io import loadmat, savemat
 
 import cv2
@@ -28,8 +27,8 @@ parser.add_argument("--noisetype", type=str, default="gauss25", choices=['gauss2
 parser.add_argument('--resume', type=str)
 parser.add_argument('--checkpoint', type=str)
 parser.add_argument('--data_dir', type=str,
-                    default='./dataset/fmdd_sub/train')
-parser.add_argument('--val_dirs', type=str, default='./dataset/fmdd_sub/fmdd_sub')
+                    default='./dataset/train')
+parser.add_argument('--val_dirs', type=str, default='./dataset/fmdd_sub/validation')
 parser.add_argument('--subfold', type=str, required=True, 
                        choices=['Confocal_FISH','Confocal_MICE','TwoPhoton_MICE'])
 parser.add_argument('--save_model_path', type=str,
@@ -403,6 +402,7 @@ class DataLoader_Fmdd_sub(Dataset):
         super(DataLoader_Fmdd_sub, self).__init__()
         self.data_dir = data_dir
         self.patch = patch
+        print("data_dir===",data_dir)
         # self.train_fns = glob.glob(os.path.join(data_dir, '**/raw/**/**.png'), recursive=True)
         self.train_fns = glob.glob(os.path.join(data_dir, opt.subfold, 'raw/**/**.png'), recursive=True)        
         self.train_fns.sort()
@@ -661,21 +661,7 @@ for epoch in range(epoch_init, opt.n_epoch + 1):
         loss_reg = alpha * torch.mean(diff**2)
         loss_rev = torch.mean(revisible**2)
         loss_all = loss_reg + loss_rev
-        #可视化感受野
-        gradients = noisy.grad.data.abs().squeeze().cpu().numpy()
-        gradients = (gradients - gradients.min()) / (gradients.max() - gradients.min())
-        # 可视化
-        plt.imshow(gradients.transpose(1, 2, 0))
-        plt.axis('off')
-
-        # 保存图片（支持PNG/JPG等格式）
-        plt.savefig("./saved_images/heatmap.png",
-                    dpi=300,  # 分辨率
-                    bbox_inches='tight'  # 去除白边
-                    )
-        plt.close()
-
-
+         
         loss_all.backward()
         optimizer.step()
         logger.info(
@@ -687,13 +673,14 @@ for epoch in range(epoch_init, opt.n_epoch + 1):
 
     if epoch % opt.n_snapshot == 0 or epoch == opt.n_epoch:
         network.eval()
+        print("enter eval ----------")
         # save checkpoint
         save_network(network, epoch, "model")
         save_state(epoch, optimizer, scheduler)
-        # fmdd_sub
+        # validation
         save_model_path = os.path.join(opt.save_model_path, opt.log_name,
                                        systime)
-        validation_path = os.path.join(save_model_path, "fmdd_sub")
+        validation_path = os.path.join(save_model_path, "validation")
         np.random.seed(101)
 
         for valid_name, valid_data in valid_dict.items():
