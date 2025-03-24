@@ -6,6 +6,7 @@ import glob
 import datetime
 import argparse
 import numpy as np
+from matplotlib import pyplot as plt
 from scipy.io import loadmat, savemat
 
 import cv2
@@ -28,7 +29,7 @@ parser.add_argument('--resume', type=str)
 parser.add_argument('--checkpoint', type=str)
 parser.add_argument('--data_dir', type=str,
                     default='./dataset/fmdd_sub/train')
-parser.add_argument('--val_dirs', type=str, default='./dataset/fmdd_sub/validation')
+parser.add_argument('--val_dirs', type=str, default='./dataset/fmdd_sub/fmdd_sub')
 parser.add_argument('--subfold', type=str, required=True, 
                        choices=['Confocal_FISH','Confocal_MICE','TwoPhoton_MICE'])
 parser.add_argument('--save_model_path', type=str,
@@ -660,6 +661,20 @@ for epoch in range(epoch_init, opt.n_epoch + 1):
         loss_reg = alpha * torch.mean(diff**2)
         loss_rev = torch.mean(revisible**2)
         loss_all = loss_reg + loss_rev
+        #可视化感受野
+        gradients = noisy.grad.data.abs().squeeze().cpu().numpy()
+        gradients = (gradients - gradients.min()) / (gradients.max() - gradients.min())
+        # 可视化
+        plt.imshow(gradients.transpose(1, 2, 0))
+        plt.axis('off')
+
+        # 保存图片（支持PNG/JPG等格式）
+        plt.savefig("./saved_images/heatmap.png",
+                    dpi=300,  # 分辨率
+                    bbox_inches='tight'  # 去除白边
+                    )
+        plt.close()
+
 
         loss_all.backward()
         optimizer.step()
@@ -675,10 +690,10 @@ for epoch in range(epoch_init, opt.n_epoch + 1):
         # save checkpoint
         save_network(network, epoch, "model")
         save_state(epoch, optimizer, scheduler)
-        # validation
+        # fmdd_sub
         save_model_path = os.path.join(opt.save_model_path, opt.log_name,
                                        systime)
-        validation_path = os.path.join(save_model_path, "validation")
+        validation_path = os.path.join(save_model_path, "fmdd_sub")
         np.random.seed(101)
 
         for valid_name, valid_data in valid_dict.items():
