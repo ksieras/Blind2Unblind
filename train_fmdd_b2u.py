@@ -6,6 +6,7 @@ import glob
 import datetime
 import argparse
 import numpy as np
+from matplotlib import pyplot as plt
 from scipy.io import loadmat, savemat
 
 import cv2
@@ -661,7 +662,21 @@ for epoch in range(epoch_init, opt.n_epoch + 1):
         loss_reg = alpha * torch.mean(diff**2)
         loss_rev = torch.mean(revisible**2)
         loss_all = loss_reg + loss_rev
-         
+
+        #visualization
+        gradients = noisy.grad.data.abs().squeeze().cpu().numpy()
+        gradients = (gradients - gradients.min()) / (gradients.max() - gradients.min())
+
+        plt.imshow(gradients.transpose(1, 2, 0))
+        plt.axis('off')
+
+        plt.savefig("./saved_images/heatmap.png",
+                    dpi=300,
+                    bbox_inches='tight'
+                    )
+        plt.close()
+
+
         loss_all.backward()
         optimizer.step()
         logger.info(
