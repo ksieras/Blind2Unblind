@@ -28,7 +28,7 @@ parser.add_argument("--noisetype", type=str, default="gauss25", choices=['gauss2
 parser.add_argument('--resume', type=str)
 parser.add_argument('--checkpoint', type=str)
 parser.add_argument('--data_dir', type=str,
-                    default='./dataset/train')
+                    default='G:/restoration\dataset/fmdd/fmdd/fmdd')
 parser.add_argument('--val_dirs', type=str, default='./dataset/fmdd_sub/validation')
 parser.add_argument('--subfold', type=str, required=True, 
                        choices=['Confocal_FISH','Confocal_MICE','TwoPhoton_MICE'])
@@ -68,8 +68,8 @@ util.setup_logger(
     screen=True,
     tofile=True,
 )
-logger = logging.getLogger("train")
 
+logger = logging.getLogger("train")
 
 def save_network(network, epoch, name):
     save_path = os.path.join(opt.save_path, 'models')
@@ -544,293 +544,284 @@ def calculate_psnr(target, ref, data_range=255.0):
     return psnr
 
 
+if __name__=='__main__':
+
 # Training Set
-TrainingDataset = DataLoader_Fmdd_sub(opt.data_dir, patch=opt.patchsize)
-TrainingLoader = DataLoader(dataset=TrainingDataset,
-                            num_workers=8,
-                            batch_size=opt.batchsize,
-                            shuffle=True,
-                            pin_memory=False,
-                            drop_last=True)
+    print('data--dir',opt.data_dir)
+    TrainingDataset = DataLoader_Fmdd_sub(opt.data_dir, patch=opt.patchsize)
+    TrainingLoader = DataLoader(dataset=TrainingDataset,
+                                num_workers=8,
+                                batch_size=opt.batchsize,
+                                shuffle=True,
+                                pin_memory=False,
+                                drop_last=True)
 
-# # Confocal_FISH | Confocal_MICE | TwoPhoton_MICE | 
-# fold_list = ['Confocal_FISH', 'Confocal_MICE', 'TwoPhoton_MICE']
-# # Validation Set
-# Confocal_FISH_dir = os.path.join(opt.val_dirs, "Confocal_FISH")
-# Confocal_MICE_dir = os.path.join(opt.val_dirs, "Confocal_MICE")
-# TwoPhoton_MICE_dir = os.path.join(opt.val_dirs, "TwoPhoton_MICE")
-# valid_dict = {
-#     "Confocal_FISH": validation_fmdd(Confocal_FISH_dir),
-#     "Confocal_MICE": validation_fmdd(Confocal_MICE_dir),
-#     "TwoPhoton_MICE": validation_fmdd(TwoPhoton_MICE_dir)
-# }
+    # # Confocal_FISH | Confocal_MICE | TwoPhoton_MICE |
+    # fold_list = ['Confocal_FISH', 'Confocal_MICE', 'TwoPhoton_MICE']
+    # # Validation Set
+    # Confocal_FISH_dir = os.path.join(opt.val_dirs, "Confocal_FISH")
+    # Confocal_MICE_dir = os.path.join(opt.val_dirs, "Confocal_MICE")
+    # TwoPhoton_MICE_dir = os.path.join(opt.val_dirs, "TwoPhoton_MICE")
+    # valid_dict = {
+    #     "Confocal_FISH": validation_fmdd(Confocal_FISH_dir),
+    #     "Confocal_MICE": validation_fmdd(Confocal_MICE_dir),
+    #     "TwoPhoton_MICE": validation_fmdd(TwoPhoton_MICE_dir)
+    # }
 
-valid_dict = {
-    opt.subfold: validation_fmdd(os.path.join(opt.val_dirs, opt.subfold))
-}
+    valid_dict = {
+        opt.subfold: validation_fmdd(os.path.join(opt.val_dirs, opt.subfold))
+    }
 
-# Masker
-masker = Masker(width=4, mode='interpolate', mask_type='all')
+    # Masker
+    masker = Masker(width=4, mode='interpolate', mask_type='all')
 
-# Network
-network = UNet(in_channels=opt.n_channel,
-                out_channels=opt.n_channel,
-                wf=opt.n_feature)
-if opt.parallel:
-    network = torch.nn.DataParallel(network)
-network = network.cuda()
+    # Network
+    network = UNet(in_channels=opt.n_channel,
+                    out_channels=opt.n_channel,
+                    wf=opt.n_feature)
+    if opt.parallel:
+        network = torch.nn.DataParallel(network)
+    network = network.cuda()
 
-# about training scheme
-num_epoch = opt.n_epoch
-ratio = num_epoch / 100
-optimizer = optim.Adam(network.parameters(), lr=opt.lr,
-                       weight_decay=opt.w_decay)
-scheduler = lr_scheduler.MultiStepLR(optimizer,
-                                     milestones=[
-                                         int(20 * ratio) - 1,
-                                         int(40 * ratio) - 1,
-                                         int(60 * ratio) - 1,
-                                         int(80 * ratio) - 1
-                                     ],
-                                     gamma=opt.gamma)
-print("Batchsize={}, number of epoch={}".format(opt.batchsize, opt.n_epoch))
+    # about training scheme
+    num_epoch = opt.n_epoch
+    ratio = num_epoch / 100
+    optimizer = optim.Adam(network.parameters(), lr=opt.lr,
+                           weight_decay=opt.w_decay)
+    scheduler = lr_scheduler.MultiStepLR(optimizer,
+                                         milestones=[
+                                             int(20 * ratio) - 1,
+                                             int(40 * ratio) - 1,
+                                             int(60 * ratio) - 1,
+                                             int(80 * ratio) - 1
+                                         ],
+                                         gamma=opt.gamma)
+    print("Batchsize={}, number of epoch={}".format(opt.batchsize, opt.n_epoch))
 
-# Resume and load pre-trained model
-epoch_init = 1
-if opt.resume is not None:
-    epoch_init, optimizer, scheduler = resume_state(opt.resume, optimizer, scheduler)
-if opt.checkpoint is not None:
-    network = load_network(opt.checkpoint, network, strict=True)
+    # Resume and load pre-trained model
+    epoch_init = 1
+    if opt.resume is not None:
+        epoch_init, optimizer, scheduler = resume_state(opt.resume, optimizer, scheduler)
+    if opt.checkpoint is not None:
+        network = load_network(opt.checkpoint, network, strict=True)
 
-# temp
-if opt.checkpoint is not None:
-    epoch_init = 65
-    for i in range(1, epoch_init):
+    # temp
+    if opt.checkpoint is not None:
+        epoch_init = 65
+        for i in range(1, epoch_init):
+            scheduler.step()
+            new_lr = scheduler.get_lr()[0]
+            logger.info('----------------------------------------------------')
+            logger.info("==> Resuming Training with learning rate:{}".format(new_lr))
+            logger.info('----------------------------------------------------')
+
+    print('init finish')
+
+
+    Thread1 = 0.4
+    Thread2 = 1.0
+    Lambda1 = opt.Lambda1
+    Lambda2 = opt.Lambda2
+    increase_ratio = opt.increase_ratio
+
+    for epoch in range(epoch_init, opt.n_epoch + 1):
+        cnt = 0
+
+        for param_group in optimizer.param_groups:
+            current_lr = param_group['lr']
+        print("LearningRate of Epoch {} = {}".format(epoch, current_lr))
+
+        network.train()
+        for iteration, noisy in enumerate(TrainingLoader):
+            st = time.time()
+            noisy = noisy / 255.0
+            noisy = noisy.cuda()
+            noisy.requires_grad_(True)
+            optimizer.zero_grad()
+
+
+
+            net_input, mask = masker.train(noisy)
+            noisy_output = network(net_input)
+            n, c, h, w = noisy.shape
+            noisy_output = (noisy_output*mask).view(n, -1, c, h, w).sum(dim=1)
+            diff = noisy_output - noisy
+
+            with torch.no_grad():
+                exp_output = network(noisy)
+            exp_diff = exp_output - noisy
+
+            # g25, p30: 1_1-2; frange-10
+            # g5-50 | p5-50 | raw; 1_1-2; range-10
+            Lambda = epoch / opt.n_epoch
+            if Lambda <= Thread1:
+                beta = Lambda2
+            elif Thread1 <= Lambda <= Thread2:
+                beta = Lambda2 + (Lambda - Thread1) * \
+                    (increase_ratio-Lambda2) / (Thread2-Thread1)
+            else:
+                beta = increase_ratio
+            alpha = Lambda1
+
+            revisible = diff + beta * exp_diff
+            loss_reg = alpha * torch.mean(diff**2)
+            loss_rev = torch.mean(revisible**2)
+            loss_all = loss_reg + loss_rev
+            loss_all.backward()
+
+            optimizer.step()
+            logger.info(
+                '{:04d} {:05d} diff={:.6f}, exp_diff={:.6f}, Loss_Reg={:.6f}, Lambda={}, Loss_Rev={:.6f}, Loss_All={:.6f}, Time={:.4f}'
+                .format(epoch, iteration, torch.mean(diff**2).item(), torch.mean(exp_diff**2).item(),
+                        loss_reg.item(), Lambda, loss_rev.item(), loss_all.item(), time.time() - st))
+
         scheduler.step()
-        new_lr = scheduler.get_lr()[0]
-        logger.info('----------------------------------------------------')
-        logger.info("==> Resuming Training with learning rate:{}".format(new_lr))
-        logger.info('----------------------------------------------------')
 
-print('init finish')
+        if epoch % opt.n_snapshot == 0 or epoch == opt.n_epoch:
+            network.eval()
+            print("enter eval ----------")
+            # save checkpoint
+            save_network(network, epoch, "model")
+            save_state(epoch, optimizer, scheduler)
+            # validation
+            save_model_path = os.path.join(opt.save_model_path, opt.log_name,
+                                           systime)
+            validation_path = os.path.join(save_model_path, "validation")
+            np.random.seed(101)
 
+            for valid_name, valid_data in valid_dict.items():
+                avg_psnr_dn = []
+                avg_ssim_dn = []
+                avg_psnr_exp = []
+                avg_ssim_exp = []
+                avg_psnr_mid = []
+                avg_ssim_mid = []
+                save_dir = os.path.join(validation_path, valid_name)
+                os.makedirs(save_dir, exist_ok=True)
+                valid_noisy, valid_gt = valid_data
+                num_img = len(valid_noisy)
+                for idx in range(num_img):
+                    im = valid_gt[idx]
+                    origin255 = im.copy()
+                    origin255 = origin255.astype(np.uint8)
+                    noisy_im = valid_noisy[idx]
+                    noisy_im = np.array(noisy_im, dtype=np.float32) / 255.0
+                    noisy255 = noisy_im.copy()
+                    noisy255 = np.clip(noisy255 * 255.0 + 0.5, 0,
+                                        255).astype(np.uint8)
+                    # padding to square
+                    H = noisy_im.shape[0]
+                    W = noisy_im.shape[1]
+                    val_size = (max(H, W) + 31) // 32 * 32
+                    noisy_im = np.pad(
+                        noisy_im,
+                        [[0, val_size - H], [0, val_size - W], [0, 0]],
+                        'reflect')
+                    transformer = transforms.Compose([transforms.ToTensor()])
+                    noisy_im = transformer(noisy_im)
+                    noisy_im = torch.unsqueeze(noisy_im, 0)
+                    noisy_im = noisy_im.cuda()
+                    with torch.no_grad():
+                        n, c, h, w = noisy_im.shape
+                        net_input, mask = masker.train(noisy_im)
+                        noisy_output = (network(net_input) *
+                                        mask).view(n, -1, c, h, w).sum(dim=1)
+                        dn_output = noisy_output.detach().clone()
+                        # Release gpu memory
+                        del net_input, mask, noisy_output
+                        torch.cuda.empty_cache()
+                        exp_output = network(noisy_im)
+                    pred_dn = dn_output[:, :, :H, :W]
+                    pred_exp = exp_output.detach().clone()[:, :, :H, :W]
+                    pred_mid = (pred_dn + beta*pred_exp) / (1 + beta)
 
-Thread1 = 0.4
-Thread2 = 1.0
-Lambda1 = opt.Lambda1
-Lambda2 = opt.Lambda2
-increase_ratio = opt.increase_ratio
-
-for epoch in range(epoch_init, opt.n_epoch + 1):
-    cnt = 0
-
-    for param_group in optimizer.param_groups:
-        current_lr = param_group['lr']
-    print("LearningRate of Epoch {} = {}".format(epoch, current_lr))
-
-    network.train()
-    for iteration, noisy in enumerate(TrainingLoader):
-        st = time.time()
-        noisy = noisy / 255.0
-        noisy = noisy.cuda()
-
-        optimizer.zero_grad()
-
-        net_input, mask = masker.train(noisy)
-        noisy_output = network(net_input)
-        n, c, h, w = noisy.shape
-        noisy_output = (noisy_output*mask).view(n, -1, c, h, w).sum(dim=1)
-        diff = noisy_output - noisy
-
-        with torch.no_grad():
-            exp_output = network(noisy)
-        exp_diff = exp_output - noisy
-
-        # g25, p30: 1_1-2; frange-10
-        # g5-50 | p5-50 | raw; 1_1-2; range-10
-        Lambda = epoch / opt.n_epoch
-        if Lambda <= Thread1:
-            beta = Lambda2
-        elif Thread1 <= Lambda <= Thread2:
-            beta = Lambda2 + (Lambda - Thread1) * \
-                (increase_ratio-Lambda2) / (Thread2-Thread1)
-        else:
-            beta = increase_ratio
-        alpha = Lambda1
-
-        revisible = diff + beta * exp_diff
-        loss_reg = alpha * torch.mean(diff**2)
-        loss_rev = torch.mean(revisible**2)
-        loss_all = loss_reg + loss_rev
-
-        #visualization
-        gradients = noisy.grad.data.abs().squeeze().cpu().numpy()
-        gradients = (gradients - gradients.min()) / (gradients.max() - gradients.min())
-
-        plt.imshow(gradients.transpose(1, 2, 0))
-        plt.axis('off')
-
-        plt.savefig("./saved_images/heatmap.png",
-                    dpi=300,
-                    bbox_inches='tight'
-                    )
-        plt.close()
-
-
-        loss_all.backward()
-        optimizer.step()
-        logger.info(
-            '{:04d} {:05d} diff={:.6f}, exp_diff={:.6f}, Loss_Reg={:.6f}, Lambda={}, Loss_Rev={:.6f}, Loss_All={:.6f}, Time={:.4f}'
-            .format(epoch, iteration, torch.mean(diff**2).item(), torch.mean(exp_diff**2).item(),
-                    loss_reg.item(), Lambda, loss_rev.item(), loss_all.item(), time.time() - st))
-
-    scheduler.step()
-
-    if epoch % opt.n_snapshot == 0 or epoch == opt.n_epoch:
-        network.eval()
-        print("enter eval ----------")
-        # save checkpoint
-        save_network(network, epoch, "model")
-        save_state(epoch, optimizer, scheduler)
-        # validation
-        save_model_path = os.path.join(opt.save_model_path, opt.log_name,
-                                       systime)
-        validation_path = os.path.join(save_model_path, "validation")
-        np.random.seed(101)
-
-        for valid_name, valid_data in valid_dict.items():
-            avg_psnr_dn = []
-            avg_ssim_dn = []
-            avg_psnr_exp = []
-            avg_ssim_exp = []
-            avg_psnr_mid = []
-            avg_ssim_mid = []
-            save_dir = os.path.join(validation_path, valid_name)
-            os.makedirs(save_dir, exist_ok=True)
-            valid_noisy, valid_gt = valid_data
-            num_img = len(valid_noisy)
-            for idx in range(num_img):
-                im = valid_gt[idx]
-                origin255 = im.copy()
-                origin255 = origin255.astype(np.uint8)
-                noisy_im = valid_noisy[idx]
-                noisy_im = np.array(noisy_im, dtype=np.float32) / 255.0
-                noisy255 = noisy_im.copy()
-                noisy255 = np.clip(noisy255 * 255.0 + 0.5, 0,
-                                    255).astype(np.uint8)
-                # padding to square
-                H = noisy_im.shape[0]
-                W = noisy_im.shape[1]
-                val_size = (max(H, W) + 31) // 32 * 32
-                noisy_im = np.pad(
-                    noisy_im,
-                    [[0, val_size - H], [0, val_size - W], [0, 0]],
-                    'reflect')
-                transformer = transforms.Compose([transforms.ToTensor()])
-                noisy_im = transformer(noisy_im)
-                noisy_im = torch.unsqueeze(noisy_im, 0)
-                noisy_im = noisy_im.cuda()
-                with torch.no_grad():
-                    n, c, h, w = noisy_im.shape
-                    net_input, mask = masker.train(noisy_im)
-                    noisy_output = (network(net_input) *
-                                    mask).view(n, -1, c, h, w).sum(dim=1)
-                    dn_output = noisy_output.detach().clone()
                     # Release gpu memory
-                    del net_input, mask, noisy_output
+                    del exp_output
                     torch.cuda.empty_cache()
-                    exp_output = network(noisy_im)
-                pred_dn = dn_output[:, :, :H, :W]
-                pred_exp = exp_output.detach().clone()[:, :, :H, :W]
-                pred_mid = (pred_dn + beta*pred_exp) / (1 + beta)
 
-                # Release gpu memory
-                del exp_output
-                torch.cuda.empty_cache()
+                    pred_dn = pred_dn.permute(0, 2, 3, 1)
+                    pred_exp = pred_exp.permute(0, 2, 3, 1)
+                    pred_mid = pred_mid.permute(0, 2, 3, 1)
 
-                pred_dn = pred_dn.permute(0, 2, 3, 1)
-                pred_exp = pred_exp.permute(0, 2, 3, 1)
-                pred_mid = pred_mid.permute(0, 2, 3, 1)
+                    pred_dn = pred_dn.cpu().data.clamp(0, 1).numpy().squeeze(0)
+                    pred_exp = pred_exp.cpu().data.clamp(0, 1).numpy().squeeze(0)
+                    pred_mid = pred_mid.cpu().data.clamp(0, 1).numpy().squeeze(0)
 
-                pred_dn = pred_dn.cpu().data.clamp(0, 1).numpy().squeeze(0)
-                pred_exp = pred_exp.cpu().data.clamp(0, 1).numpy().squeeze(0)
-                pred_mid = pred_mid.cpu().data.clamp(0, 1).numpy().squeeze(0)
+                    pred255_dn = np.clip(pred_dn * 255.0 + 0.5, 0,
+                                            255).astype(np.uint8)
+                    pred255_exp = np.clip(pred_exp * 255.0 + 0.5, 0,
+                                            255).astype(np.uint8)
+                    pred255_mid = np.clip(pred_mid * 255.0 + 0.5, 0,
+                                            255).astype(np.uint8)
 
-                pred255_dn = np.clip(pred_dn * 255.0 + 0.5, 0,
-                                        255).astype(np.uint8)
-                pred255_exp = np.clip(pred_exp * 255.0 + 0.5, 0,
-                                        255).astype(np.uint8)
-                pred255_mid = np.clip(pred_mid * 255.0 + 0.5, 0,
-                                        255).astype(np.uint8)
+                    # calculate psnr
+                    psnr_dn = calculate_psnr(origin255.astype(np.float32),
+                                                pred255_dn.astype(np.float32))
+                    avg_psnr_dn.append(psnr_dn)
+                    ssim_dn = calculate_ssim(origin255.astype(np.float32),
+                                                pred255_dn.astype(np.float32))
+                    avg_ssim_dn.append(ssim_dn)
 
-                # calculate psnr
-                psnr_dn = calculate_psnr(origin255.astype(np.float32),
-                                            pred255_dn.astype(np.float32))
-                avg_psnr_dn.append(psnr_dn)
-                ssim_dn = calculate_ssim(origin255.astype(np.float32),
-                                            pred255_dn.astype(np.float32))
-                avg_ssim_dn.append(ssim_dn)
+                    psnr_exp = calculate_psnr(origin255.astype(np.float32),
+                                                pred255_exp.astype(np.float32))
+                    avg_psnr_exp.append(psnr_exp)
+                    ssim_exp = calculate_ssim(origin255.astype(np.float32),
+                                                pred255_exp.astype(np.float32))
+                    avg_ssim_exp.append(ssim_exp)
 
-                psnr_exp = calculate_psnr(origin255.astype(np.float32),
-                                            pred255_exp.astype(np.float32))
-                avg_psnr_exp.append(psnr_exp)
-                ssim_exp = calculate_ssim(origin255.astype(np.float32),
-                                            pred255_exp.astype(np.float32))
-                avg_ssim_exp.append(ssim_exp)
+                    psnr_mid = calculate_psnr(origin255.astype(np.float32),
+                                                pred255_mid.astype(np.float32))
+                    avg_psnr_mid.append(psnr_mid)
+                    ssim_mid = calculate_ssim(origin255.astype(np.float32),
+                                                pred255_mid.astype(np.float32))
+                    avg_ssim_mid.append(ssim_mid)
 
-                psnr_mid = calculate_psnr(origin255.astype(np.float32),
-                                            pred255_mid.astype(np.float32))
-                avg_psnr_mid.append(psnr_mid)
-                ssim_mid = calculate_ssim(origin255.astype(np.float32),
-                                            pred255_mid.astype(np.float32))
-                avg_ssim_mid.append(ssim_mid)
-
-                # visualization
-                save_path = os.path.join(
-                    save_dir,
-                    "{}_{:03d}-{:03d}_clean.png".format(
-                        valid_name, idx, epoch))
-                Image.fromarray(origin255.squeeze()).save(
-                    save_path)
-                save_path = os.path.join(
-                    save_dir,
-                    "{}_{:03d}-{:03d}_noisy.png".format(
-                        valid_name, idx, epoch))
-                Image.fromarray(noisy255.squeeze()).save(
-                    save_path)
-                save_path = os.path.join(
-                    save_dir,
-                    "{}_{:03d}-{:03d}_dn_{:.6f}-{:.6f}.png".format(
-                        valid_name, idx, epoch, psnr_dn, ssim_dn))
-                Image.fromarray(pred255_dn.squeeze()).save(
+                    # visualization
+                    save_path = os.path.join(
+                        save_dir,
+                        "{}_{:03d}-{:03d}_clean.png".format(
+                            valid_name, idx, epoch))
+                    Image.fromarray(origin255.squeeze()).save(
                         save_path)
-                save_path = os.path.join(
-                    save_dir,
-                    "{}_{:03d}-{:03d}_exp_{:.6f}-{:.6f}.png".format(
-                        valid_name, idx, epoch, psnr_exp, ssim_exp))
-                Image.fromarray(pred255_exp.squeeze()).save(
+                    save_path = os.path.join(
+                        save_dir,
+                        "{}_{:03d}-{:03d}_noisy.png".format(
+                            valid_name, idx, epoch))
+                    Image.fromarray(noisy255.squeeze()).save(
                         save_path)
-                save_path = os.path.join(
-                    save_dir,
-                    "{}_{:03d}-{:03d}_mid_{:.6f}-{:.6f}.png".format(
-                        valid_name, idx, epoch, psnr_mid, ssim_mid))
-                Image.fromarray(pred255_mid.squeeze()).save(
-                        save_path)
+                    save_path = os.path.join(
+                        save_dir,
+                        "{}_{:03d}-{:03d}_dn_{:.6f}-{:.6f}.png".format(
+                            valid_name, idx, epoch, psnr_dn, ssim_dn))
+                    Image.fromarray(pred255_dn.squeeze()).save(
+                            save_path)
+                    save_path = os.path.join(
+                        save_dir,
+                        "{}_{:03d}-{:03d}_exp_{:.6f}-{:.6f}.png".format(
+                            valid_name, idx, epoch, psnr_exp, ssim_exp))
+                    Image.fromarray(pred255_exp.squeeze()).save(
+                            save_path)
+                    save_path = os.path.join(
+                        save_dir,
+                        "{}_{:03d}-{:03d}_mid_{:.6f}-{:.6f}.png".format(
+                            valid_name, idx, epoch, psnr_mid, ssim_mid))
+                    Image.fromarray(pred255_mid.squeeze()).save(
+                            save_path)
 
-            avg_psnr_dn = np.array(avg_psnr_dn)
-            avg_psnr_dn = np.mean(avg_psnr_dn)
-            avg_ssim_dn = np.mean(avg_ssim_dn)
+                avg_psnr_dn = np.array(avg_psnr_dn)
+                avg_psnr_dn = np.mean(avg_psnr_dn)
+                avg_ssim_dn = np.mean(avg_ssim_dn)
 
-            avg_psnr_exp = np.array(avg_psnr_exp)
-            avg_psnr_exp = np.mean(avg_psnr_exp)
-            avg_ssim_exp = np.mean(avg_ssim_exp)
+                avg_psnr_exp = np.array(avg_psnr_exp)
+                avg_psnr_exp = np.mean(avg_psnr_exp)
+                avg_ssim_exp = np.mean(avg_ssim_exp)
 
-            avg_psnr_mid = np.array(avg_psnr_mid)
-            avg_psnr_mid = np.mean(avg_psnr_mid)
-            avg_ssim_mid = np.mean(avg_ssim_mid)
+                avg_psnr_mid = np.array(avg_psnr_mid)
+                avg_psnr_mid = np.mean(avg_psnr_mid)
+                avg_ssim_mid = np.mean(avg_ssim_mid)
 
-            log_path = os.path.join(validation_path,
-                                    "A_log_{}.csv".format(valid_name))
-            with open(log_path, "a") as f:
-                f.writelines("epoch:{},dn:{:.6f}/{:.6f},exp:{:.6f}/{:.6f},mid:{:.6f}/{:.6f}\n".format(
-                    epoch, avg_psnr_dn, avg_ssim_dn, avg_psnr_exp, avg_ssim_exp, avg_psnr_mid, avg_ssim_mid))
+                log_path = os.path.join(validation_path,
+                                        "A_log_{}.csv".format(valid_name))
+                with open(log_path, "a") as f:
+                    f.writelines("epoch:{},dn:{:.6f}/{:.6f},exp:{:.6f}/{:.6f},mid:{:.6f}/{:.6f}\n".format(
+                        epoch, avg_psnr_dn, avg_ssim_dn, avg_psnr_exp, avg_ssim_exp, avg_psnr_mid, avg_ssim_mid))
