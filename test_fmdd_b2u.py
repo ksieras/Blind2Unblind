@@ -538,7 +538,7 @@ network = network.cuda()
 # load pre-trained model
 network = load_network(opt.checkpoint, network, strict=True)
 beta = opt.beta
-#yyy---------------------
+
 # turn on eval mode
 network.eval()
 # validation
@@ -566,9 +566,6 @@ for valid_name, valid_data in valid_dict.items():
         origin255 = origin255.astype(np.uint8)
         start = time.time()
         noisy_im = valid_noisy[idx]
-        noisy_im = torch.from_numpy(noisy_im.reshape(1,1, noisy_im.shape[0], noisy_im.shape[1])).float().cuda()
-        origin255 = torch.from_numpy(origin255.reshape(1,1, origin255.shape[0], origin255.shape[1])).float().cuda()
-
         noisy255 = noisy_im.copy() * 255.0
         noisy255 = noisy255.astype(np.uint8)
 
@@ -584,6 +581,9 @@ for valid_name, valid_data in valid_dict.items():
         noisy_im = transformer(noisy_im)
         noisy_im = torch.unsqueeze(noisy_im, 0)
         noisy_im = noisy_im.cuda()
+
+
+
         with torch.no_grad():
             n, c, h, w = noisy_im.shape
             net_input, mask = masker.train(noisy_im)
