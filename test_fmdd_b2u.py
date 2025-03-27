@@ -524,13 +524,6 @@ valid_dict = {
     opt.subfold: validation_fmdd(os.path.join(opt.test_dirs, opt.subfold))
 }
 
-## load PGE model
-num_output_channel = 2
-pge_weight_dir = 'E:\pythonProject\github_restore\FBI-Denoiser\weights\PGE_Net_CF_FISH.w'
-pge_model = est_UNet(num_output_channel, depth=3)
-pge_model.load_state_dict(torch.load(pge_weight_dir))
-pge_model = pge_model.cuda()
-
 
 # Masker
 masker = Masker(width=4, mode='interpolate', mask_type='all')
@@ -545,7 +538,7 @@ network = network.cuda()
 # load pre-trained model
 network = load_network(opt.checkpoint, network, strict=True)
 beta = opt.beta
-
+#yyy---------------------
 # turn on eval mode
 network.eval()
 # validation
@@ -576,16 +569,6 @@ for valid_name, valid_data in valid_dict.items():
         noisy_im = torch.from_numpy(noisy_im.reshape(1,1, noisy_im.shape[0], noisy_im.shape[1])).float().cuda()
         origin255 = torch.from_numpy(origin255.reshape(1,1, origin255.shape[0], origin255.shape[1])).float().cuda()
 
-        #gat transform
-        est_param = pge_model(noisy_im)
-        original_alpha = torch.mean(est_param[:, 0])
-        original_sigma = torch.mean(est_param[:, 1])
-        transformed = gat(noisy_im, original_sigma, original_alpha, 0)
-        transformed, transformed_sigma, min_t, max_t = normalize_after_gat_torch(transformed)
-        transformed_target = torch.cat([transformed, transformed_sigma], dim=1)
-
-        noisy_im = transformed.detach().cpu().numpy()/255.0
-        #noisy_im = np.array(noisy_im, dtype=np.float32) / 255.0
         noisy255 = noisy_im.copy() * 255.0
         noisy255 = noisy255.astype(np.uint8)
 
@@ -607,27 +590,6 @@ for valid_name, valid_data in valid_dict.items():
             noisy_output = (network(net_input)*mask).view(n,-1,c,h,w).sum(dim=1)
             exp_output = network(noisy_im)
 
-        ##inverse GAT
-        transformed_Z = transformed_target[:, :1]
-        X = origin255.cpu().numpy()
-        X_hat = get_X_hat(transformed_Z, noisy_output).cpu().numpy()
-        transformed = transformed.cpu().numpy()
-        original_sigma = original_sigma.cpu().numpy()
-        original_alpha = original_alpha.cpu().numpy()
-        min_t = min_t.cpu().numpy()
-        max_t = max_t.cpu().numpy()
-        X_hat = X_hat * (max_t - min_t) + min_t
-        X_hat = np.clip(inverse_gat(X_hat, original_sigma, original_alpha, 0, method='closed_form'), 0, 1)
-        noisy_output = X_hat[0]
-
-        X_exp_hat = get_X_hat(transformed_Z, exp_output).cpu().numpy()
-        X_exp_hat = X_exp_hat * (max_t - min_t) + min_t
-        X_exp_hat = np.clip(inverse_gat(X_exp_hat, original_sigma, original_alpha, 0, method='closed_form'), 0, 1)
-        exp_output = X_exp_hat[0]
-
-
-        inference_time = time.time() - start
-        print('inference time:',inference_time)
 
         pred_dn = noisy_output[:, :, :H, :W]
         pred_exp = exp_output[:, :, :H, :W]
