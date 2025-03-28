@@ -22,10 +22,14 @@ from arch_unet import UNet
 import utils as util
 from collections import OrderedDict
 
+from utils import  inverse_gat, gat,normalize_after_gat_torch
+from unet import est_UNet
+
+
 parser = argparse.ArgumentParser()
 parser.add_argument("--noisetype", type=str, default="gauss25")
 parser.add_argument('--checkpoint', type=str, default='./*.pth')
-parser.add_argument('--test_dirs', type=str, default='./dataset/fmdd_sub/validation')
+parser.add_argument('--test_dirs', type=str, default='./dataset/validation')
 parser.add_argument('--subfold', type=str, required=True, 
                        choices=['Confocal_FISH','Confocal_MICE','TwoPhoton_MICE'])
 parser.add_argument('--save_test_path', type=str, default='./test')
@@ -258,6 +262,11 @@ def interpolate_mask(tensor, mask, mask_inv):
 
     return filtered_tensor.view_as(tensor) * mask + tensor * mask_inv
 
+
+def get_X_hat( Z, output):
+    X_hat = output[:, :1] * Z  #+ output[:, :1]
+
+    return X_hat
 
 class Masker(object):
     def __init__(self, width=4, mode='interpolate', mask_type='all'):
@@ -515,6 +524,13 @@ valid_dict = {
     opt.subfold: validation_fmdd(os.path.join(opt.test_dirs, opt.subfold))
 }
 
+## load PGE model
+num_output_channel = 2
+pge_weight_dir = 'E:\pythonProject\github_restore\FBI-Denoiser\weights\PGE_Net_CF_FISH.w'
+pge_model = est_UNet(num_output_channel, depth=3)
+pge_model.load_state_dict(torch.load(pge_weight_dir))
+pge_model = pge_model.cuda()
+
 
 # Masker
 masker = Masker(width=4, mode='interpolate', mask_type='all')
@@ -555,10 +571,12 @@ for valid_name, valid_data in valid_dict.items():
         im = valid_gt[idx]
         origin255 = im.copy()
         origin255 = origin255.astype(np.uint8)
+        start = time.time()
         noisy_im = valid_noisy[idx]
-        noisy_im = np.array(noisy_im, dtype=np.float32) / 255.0
-        noisy255 = noisy_im.copy() * 255.0
-        noisy255 = noisy255.astype(np.uint8)
+        noisy255 = noisy_im.copy()
+        noisy255 = np.clip(noisy255 * 255.0 + 0.5, 0,
+                           255).astype(np.uint8)
+
 
         # padding to square
         H = noisy_im.shape[0]
@@ -572,14 +590,57 @@ for valid_name, valid_data in valid_dict.items():
         noisy_im = transformer(noisy_im)
         noisy_im = torch.unsqueeze(noisy_im, 0)
         noisy_im = noisy_im.cuda()
+
+        # gat transform
+        est_param = pge_model(noisy_im)
+        original_alpha = torch.mean(est_param[:, 0])
+        original_sigma = torch.mean(est_param[:, 1])
+        transformed = gat(noisy_im, original_sigma, original_alpha, 0)
+        transformed, transformed_sigma, min_t, max_t = normalize_after_gat_torch(transformed)
+        transformed_target = torch.cat([transformed, transformed_sigma], dim=1)
+        #---------------
         with torch.no_grad():
-            n, c, h, w = noisy_im.shape
-            net_input, mask = masker.train(noisy_im)
+            n, c, h, w = transformed.shape
+            net_input, mask = masker.train(transformed)
             noisy_output = (network(net_input)*mask).view(n,-1,c,h,w).sum(dim=1)
-            exp_output = network(noisy_im)
+            exp_output = network(transformed)
+
+        ##inverse GAT------------------
+        transformed_Z = transformed_target[:, :1]
+        X = origin255
+        original_sigma = original_sigma.cpu().detach().numpy()
+        original_alpha = original_alpha.cpu().detach().numpy()
+        min_t = min_t.cpu().detach().numpy()
+        max_t = max_t.cpu().detach().numpy()
+
+        X_noisy_hat = noisy_output.cpu().detach().numpy()
+        X_noisy_hat = X_noisy_hat * (max_t - min_t) + min_t
+        X_noisy_hat = np.clip(inverse_gat(X_noisy_hat, original_sigma, original_alpha, 0, method='closed_form'), 0, 1)
+        noisy_output = X_noisy_hat
+
+        X_exp_hat = exp_output.cpu().detach().numpy()
+        X_exp_hat = X_exp_hat * (max_t - min_t) + min_t
+        X_exp_hat = np.clip(inverse_gat(X_exp_hat, original_sigma, original_alpha, 0, method='closed_form'), 0, 1)
+        exp_output = X_exp_hat
+        #-------------------
+
+        inference_time = time.time() - start
+        print('inference time:',inference_time)
+
+
         pred_dn = noisy_output[:, :, :H, :W]
         pred_exp = exp_output[:, :, :H, :W]
         pred_mid = (pred_dn + beta*pred_exp) / (1 + beta)
+
+        #pred_mid = get_X_hat(transformed_Z, pred_mid).cpu().detach().numpy()
+        # pred_mid = pred_mid.cpu().detach().numpy()
+        # pred_mid = pred_mid * (max_t - min_t) + min_t
+        # pred_mid = inverse_gat(pred_mid, original_sigma, original_alpha, 0, method='closed_form')
+
+        pred_dn = torch.from_numpy(pred_dn)
+        pred_exp = torch.from_numpy(pred_exp)
+        pred_mid = torch.from_numpy(pred_mid)
+
 
         pred_dn = pred_dn.permute(0, 2, 3, 1)
         pred_exp = pred_exp.permute(0, 2, 3, 1)
@@ -587,7 +648,7 @@ for valid_name, valid_data in valid_dict.items():
 
         pred_dn = pred_dn.cpu().data.clamp(0, 1).numpy().squeeze(0)
         pred_exp = pred_exp.cpu().data.clamp(0, 1).numpy().squeeze(0)
-        pred_mid = pred_mid.cpu().data.clamp(0, 1).numpy().squeeze(0)     
+        pred_mid = pred_mid.cpu().data.clamp(0, 1).numpy().squeeze(0)
 
         pred255_dn = np.clip(pred_dn * 255.0 + 0.5, 0,
                             255).astype(np.uint8)

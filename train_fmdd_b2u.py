@@ -8,7 +8,8 @@ import argparse
 import numpy as np
 from matplotlib import pyplot as plt
 from scipy.io import loadmat, savemat
-
+from utils import  inverse_gat, gat,normalize_after_gat_torch
+from unet import est_UNet
 import cv2
 from PIL import Image
 import torch
@@ -546,6 +547,13 @@ def calculate_psnr(target, ref, data_range=255.0):
 
 if __name__=='__main__':
 
+    ## load PGE model---------
+    num_output_channel = 2
+    pge_weight_dir = 'E:\pythonProject\github_restore\FBI-Denoiser\weights\PGE_Net_CF_FISH.w'
+    pge_model = est_UNet(num_output_channel, depth=3)
+    pge_model.load_state_dict(torch.load(pge_weight_dir))
+    pge_model = pge_model.cuda()
+    #--------------------
 # Training Set
     print('data--dir',opt.data_dir)
     TrainingDataset = DataLoader_Fmdd_sub(opt.data_dir, patch=opt.patchsize)
@@ -639,18 +647,48 @@ if __name__=='__main__':
             noisy.requires_grad_(True)
             optimizer.zero_grad()
 
-
-
-            net_input, mask = masker.train(noisy)
+            # gat transform------
+            est_param = pge_model(noisy)
+            original_alpha = torch.mean(est_param[:, 0])
+            original_sigma = torch.mean(est_param[:, 1])
+            transformed = gat(noisy, original_sigma, original_alpha, 0)
+            transformed, transformed_sigma, min_t, max_t = normalize_after_gat_torch(transformed)
+            transformed_target = torch.cat([transformed, transformed_sigma], dim=1)
+            #----------
+            net_input, mask = masker.train(transformed)
             noisy_output = network(net_input)
-            n, c, h, w = noisy.shape
+            n, c, h, w = transformed.shape
             noisy_output = (noisy_output*mask).view(n, -1, c, h, w).sum(dim=1)
-            diff = noisy_output - noisy
+            diff = noisy_output - transformed
 
             with torch.no_grad():
-                exp_output = network(noisy)
-            exp_diff = exp_output - noisy
+                exp_output = network(transformed)
 
+
+            ##inverse GAT--------
+            transformed_Z = transformed_target[:, :1]
+            original_sigma = original_sigma.cpu().detach().numpy()
+            original_alpha = original_alpha.cpu().detach().numpy()
+            min_t = min_t.cpu().detach().numpy()
+            max_t = max_t.cpu().detach().numpy()
+
+
+            X_noisy_hat = noisy_output.cpu().detach().numpy()
+            X_noisy_hat = X_noisy_hat * (max_t - min_t) + min_t
+            X_noisy_hat = np.clip(inverse_gat(X_noisy_hat, original_sigma, original_alpha, 0, method='closed_form'), 0,
+                                  1)
+            noisy = X_noisy_hat
+
+            X_exp_hat = exp_output.cpu().detach().numpy()
+            X_exp_hat = X_exp_hat * (max_t - min_t) + min_t
+            X_exp_hat = np.clip(inverse_gat(X_exp_hat, original_sigma, original_alpha, 0, method='closed_form'), 0, 1)
+            exp_output = X_exp_hat
+            #--------------
+
+
+            exp_diff = exp_output - noisy
+            exp_diff = torch.from_numpy(exp_diff)
+            exp_diff = exp_diff.to('cuda:0')
             # g25, p30: 1_1-2; frange-10
             # g5-50 | p5-50 | raw; 1_1-2; range-10
             Lambda = epoch / opt.n_epoch
@@ -721,6 +759,15 @@ if __name__=='__main__':
                     noisy_im = transformer(noisy_im)
                     noisy_im = torch.unsqueeze(noisy_im, 0)
                     noisy_im = noisy_im.cuda()
+
+                    # gat transform
+                    est_param = pge_model(noisy_im)
+                    original_alpha = torch.mean(est_param[:, 0])
+                    original_sigma = torch.mean(est_param[:, 1])
+                    transformed = gat(noisy_im, original_sigma, original_alpha, 0)
+                    transformed, transformed_sigma, min_t, max_t = normalize_after_gat_torch(transformed)
+                    transformed_target = torch.cat([transformed, transformed_sigma], dim=1)
+                    # ---------------
                     with torch.no_grad():
                         n, c, h, w = noisy_im.shape
                         net_input, mask = masker.train(noisy_im)
@@ -731,6 +778,28 @@ if __name__=='__main__':
                         del net_input, mask, noisy_output
                         torch.cuda.empty_cache()
                         exp_output = network(noisy_im)
+
+
+                    ##inverse GAT------------------
+                    transformed_Z = transformed_target[:, :1]
+                    X = origin255
+                    original_sigma = original_sigma.cpu().detach().numpy()
+                    original_alpha = original_alpha.cpu().detach().numpy()
+                    min_t = min_t.cpu().detach().numpy()
+                    max_t = max_t.cpu().detach().numpy()
+
+                    X_noisy_hat = noisy_output.cpu().detach().numpy()
+                    X_noisy_hat = X_noisy_hat * (max_t - min_t) + min_t
+                    X_noisy_hat = np.clip(
+                        inverse_gat(X_noisy_hat, original_sigma, original_alpha, 0, method='closed_form'), 0, 1)
+                    noisy_output = X_noisy_hat
+
+                    X_exp_hat = exp_output.cpu().detach().numpy()
+                    X_exp_hat = X_exp_hat * (max_t - min_t) + min_t
+                    X_exp_hat = np.clip(inverse_gat(X_exp_hat, original_sigma, original_alpha, 0, method='closed_form'),
+                                        0, 1)
+                    exp_output = X_exp_hat
+                    # -------------------
                     pred_dn = dn_output[:, :, :H, :W]
                     pred_exp = exp_output.detach().clone()[:, :, :H, :W]
                     pred_mid = (pred_dn + beta*pred_exp) / (1 + beta)
