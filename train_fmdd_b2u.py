@@ -775,7 +775,7 @@ if __name__=='__main__':
                                         mask).view(n, -1, c, h, w).sum(dim=1)
                         dn_output = noisy_output.detach().clone()
                         # Release gpu memory
-                        del net_input, mask, noisy_output
+                        del net_input, mask
                         torch.cuda.empty_cache()
                         exp_output = network(noisy_im)
 
@@ -800,9 +800,14 @@ if __name__=='__main__':
                                         0, 1)
                     exp_output = X_exp_hat
                     # -------------------
+
+
                     pred_dn = dn_output[:, :, :H, :W]
-                    pred_exp = exp_output.detach().clone()[:, :, :H, :W]
+                    pred_exp = torch.from_numpy(exp_output.copy()[:, :, :H, :W]).to('cuda:0')
                     pred_mid = (pred_dn + beta*pred_exp) / (1 + beta)
+
+
+
 
                     # Release gpu memory
                     del exp_output
