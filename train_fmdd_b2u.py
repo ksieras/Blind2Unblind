@@ -29,7 +29,7 @@ parser.add_argument("--noisetype", type=str, default="gauss25", choices=['gauss2
 parser.add_argument('--resume', type=str)
 parser.add_argument('--checkpoint', type=str)
 parser.add_argument('--data_dir', type=str,
-                    default='G:/restoration\dataset/fmdd/fmdd/fmdd')
+                    default='./dataset/fmdd_sub/validation') #G:/restoration\dataset/fmdd/fmdd/fmdd
 parser.add_argument('--val_dirs', type=str, default='./dataset/fmdd_sub/validation')
 parser.add_argument('--subfold', type=str, required=True, 
                        choices=['Confocal_FISH','Confocal_MICE','TwoPhoton_MICE'])
