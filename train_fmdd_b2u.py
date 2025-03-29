@@ -19,7 +19,6 @@ from torchvision import transforms
 from torch.utils.data import DataLoader
 from torch.utils.data import Dataset
 from arch_unet import UNet
-from unet import est_UNet
 import utils as util
 from collections import OrderedDict
 
@@ -548,17 +547,6 @@ def calculate_psnr(target, ref, data_range=255.0):
 if __name__=='__main__':
 
 # Training Set
-    print('data--dir',opt.data_dir)
-    num_output_channel = 2
-    pge_weight_dir = 'E:\pythonProject\github_restore\FBI-Denoiser\weights\FBI_Denoiser_CF_FISH.w'
-    ## load PGE model
-    pge_model = est_UNet(num_output_channel, depth=3)
-    pge_model.load_state_dict(torch.load(pge_weight_dir))
-    pge_model = pge_model.cuda()
-
-    for param in pge_model.parameters():
-        param.requires_grad = False
-
     TrainingDataset = DataLoader_Fmdd_sub(opt.data_dir, patch=opt.patchsize)
     TrainingLoader = DataLoader(dataset=TrainingDataset,
                                 num_workers=8,
@@ -649,11 +637,6 @@ if __name__=='__main__':
             noisy = noisy.cuda()
             noisy.requires_grad_(True)
             optimizer.zero_grad()
-            #pge process
-            est_param = pge_model(noisy)
-            original_alpha = torch.mean(est_param[:, 0])
-            original_sigma = torch.mean(est_param[:, 1])
-            transformed = gat(noisy, original_sigma, original_alpha, 0)
 
 
             net_input, mask = masker.train(noisy)
