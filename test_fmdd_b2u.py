@@ -23,7 +23,7 @@ import utils as util
 from collections import OrderedDict
 
 from utils import  inverse_gat, gat,normalize_after_gat_torch
-from unet import est_UNet
+
 
 
 parser = argparse.ArgumentParser()
