@@ -29,8 +29,8 @@ parser.add_argument("--noisetype", type=str, default="gauss25", choices=['gauss2
 parser.add_argument('--resume', type=str)
 parser.add_argument('--checkpoint', type=str)
 parser.add_argument('--data_dir', type=str,
-                    default='./dataset/fmdd_sub/validation') #G:/restoration\dataset/fmdd/fmdd/fmdd
-parser.add_argument('--val_dirs', type=str, default='./dataset/fmdd_sub/validation')
+                    default='G:\\restoration\dataset\\fmdd\\fmdd\\fmdd') #G:/restoration\dataset/fmdd/fmdd/fmdd
+parser.add_argument('--val_dirs', type=str, default='E:\pythonProject\github_restore\FBI-Denoiser\data\\test')
 parser.add_argument('--subfold', type=str, required=True, 
                        choices=['Confocal_FISH','Confocal_MICE','TwoPhoton_MICE'])
 parser.add_argument('--save_model_path', type=str,
@@ -664,31 +664,7 @@ if __name__=='__main__':
             with torch.no_grad():
                 exp_output = network(transformed)
 
-
-            ##inverse GAT--------
-            transformed_Z = transformed_target[:, :1]
-            original_sigma = original_sigma.cpu().detach().numpy()
-            original_alpha = original_alpha.cpu().detach().numpy()
-            min_t = min_t.cpu().detach().numpy()
-            max_t = max_t.cpu().detach().numpy()
-
-
-            X_noisy_hat = noisy_output.cpu().detach().numpy()
-            X_noisy_hat = X_noisy_hat * (max_t - min_t) + min_t
-            X_noisy_hat = np.clip(inverse_gat(X_noisy_hat, original_sigma, original_alpha, 0, method='closed_form'), 0,
-                                  1)
-            noisy = X_noisy_hat
-
-            X_exp_hat = exp_output.cpu().detach().numpy()
-            X_exp_hat = X_exp_hat * (max_t - min_t) + min_t
-            X_exp_hat = np.clip(inverse_gat(X_exp_hat, original_sigma, original_alpha, 0, method='closed_form'), 0, 1)
-            exp_output = X_exp_hat
-            #--------------
-
-
             exp_diff = exp_output - noisy
-            exp_diff = torch.from_numpy(exp_diff)
-            exp_diff = exp_diff.to('cuda:0')
             # g25, p30: 1_1-2; frange-10
             # g5-50 | p5-50 | raw; 1_1-2; range-10
             Lambda = epoch / opt.n_epoch
@@ -744,9 +720,9 @@ if __name__=='__main__':
                     origin255 = origin255.astype(np.uint8)
                     noisy_im = valid_noisy[idx]
                     noisy_im = np.array(noisy_im, dtype=np.float32) / 255.0
+                    noisy255 = noisy_im.copy() * 255.0
                     noisy255 = noisy_im.copy()
-                    noisy255 = np.clip(noisy255 * 255.0 + 0.5, 0,
-                                        255).astype(np.uint8)
+
                     # padding to square
                     H = noisy_im.shape[0]
                     W = noisy_im.shape[1]

@@ -33,7 +33,7 @@ parser.add_argument('--test_dirs', type=str, default='E:\pythonProject\github_re
 parser.add_argument('--subfold', type=str, required=True, 
                        choices=['Confocal_FISH','Confocal_MICE','TwoPhoton_MICE'])
 parser.add_argument('--save_test_path', type=str, default='./test')
-parser.add_argument('--log_name', type=str, default='xxx_b2u_sunet_fmdd_112rf20')
+parser.add_argument('--log_name', type=str, default='rawRGB_112rf20_beta19.4')
 parser.add_argument('--gpu_devices', default='0', type=str)
 parser.add_argument('--parallel', action='store_true')
 parser.add_argument('--n_feature', type=int, default=48)
@@ -42,7 +42,7 @@ parser.add_argument("--beta", type=float, default=20.0)
 
 
 opt, _ = parser.parse_known_args()
-assert opt.subfold in opt.checkpoint
+#assert opt.subfold in opt.checkpoint
 systime = datetime.datetime.now().strftime('%Y-%m-%d-%H-%M')
 operation_seed_counter = 0
 os.environ['CUDA_VISIBLE_DEVICES'] = opt.gpu_devices
