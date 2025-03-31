@@ -573,10 +573,10 @@ for valid_name, valid_data in valid_dict.items():
         origin255 = origin255.astype(np.uint8)
         start = time.time()
         noisy_im = valid_noisy[idx]
-        noisy255 = noisy_im.copy()
-        noisy255 = np.clip(noisy255 * 255.0 + 0.5, 0,
-                           255).astype(np.uint8)
 
+        noisy_im = np.array(noisy_im, dtype=np.float32) / 255.0
+        noisy255 = noisy_im.copy() * 255.0
+        noisy255 = noisy255.astype(np.uint8)
 
         # padding to square
         H = noisy_im.shape[0]
