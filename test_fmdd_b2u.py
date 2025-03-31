@@ -548,7 +548,7 @@ for valid_name, valid_data in valid_dict.items():
     avg_ssim_exp = []
     avg_psnr_mid = []
     avg_ssim_mid = []
-
+    avg_inference_time = []
     valid_noisy, valid_gt = valid_data
     num_img = len(valid_noisy)
     for idx in range(num_img):
@@ -572,11 +572,16 @@ for valid_name, valid_data in valid_dict.items():
         noisy_im = transformer(noisy_im)
         noisy_im = torch.unsqueeze(noisy_im, 0)
         noisy_im = noisy_im.cuda()
+        inference_time = time.time()
         with torch.no_grad():
             n, c, h, w = noisy_im.shape
             net_input, mask = masker.train(noisy_im)
             noisy_output = (network(net_input) * mask).view(n, -1, c, h, w).sum(dim=1)
             exp_output = network(noisy_im)
+
+        inference_time = time.time() - inference_time
+        print('inference time:',inference_time)
+        avg_inference_time.append(inference_time)
         pred_dn = noisy_output[:, :, :H, :W]
         pred_exp = exp_output[:, :, :H, :W]
         pred_mid = (pred_dn + beta * pred_exp) / (1 + beta)
@@ -663,8 +668,10 @@ for valid_name, valid_data in valid_dict.items():
     avg_psnr_mid = np.mean(avg_psnr_mid)
     avg_ssim_mid = np.mean(avg_ssim_mid)
 
+    avg_inference_time = np.array(avg_inference_time)
+    avg_inference_time = np.mean(avg_inference_time)
     logger.info(
-        "----Average PSNR/SSIM results for {}----\n\tPSNR_DN: {:.6f} dB; SSIM_DN: {:.6f}\n----PSNR_EXP: {:.6f} dB; SSIM_EXP: {:.6f}\n----PSNR_MID: {:.6f} dB; SSIM_MID: {:.6f}".format(
-            valid_name, avg_psnr_dn, avg_ssim_dn, avg_psnr_exp, avg_ssim_exp, avg_psnr_mid, avg_ssim_mid
+        "----Average time: {} \n Average PSNR/SSIM results for {}----\n\tPSNR_DN: {:.6f} dB; SSIM_DN: {:.6f}\n----PSNR_EXP: {:.6f} dB; SSIM_EXP: {:.6f}\n----PSNR_MID: {:.6f} dB; SSIM_MID: {:.6f}".format(
+            avg_inference_time,valid_name, avg_psnr_dn, avg_ssim_dn, avg_psnr_exp, avg_ssim_exp, avg_psnr_mid, avg_ssim_mid
         )
     )
