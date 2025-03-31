@@ -29,7 +29,7 @@ from unet import est_UNet
 parser = argparse.ArgumentParser()
 parser.add_argument("--noisetype", type=str, default="gauss25")
 parser.add_argument('--checkpoint', type=str, default='./*.pth')
-parser.add_argument('--test_dirs', type=str, default='./dataset/validation')
+parser.add_argument('--test_dirs', type=str, default='E:\pythonProject\github_restore\FBI-Denoiser\data\\test')
 parser.add_argument('--subfold', type=str, required=True, 
                        choices=['Confocal_FISH','Confocal_MICE','TwoPhoton_MICE'])
 parser.add_argument('--save_test_path', type=str, default='./test')
