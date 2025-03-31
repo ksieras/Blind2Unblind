@@ -22,16 +22,12 @@ from arch_unet import UNet
 import utils as util
 from collections import OrderedDict
 
-from utils import  inverse_gat, gat,normalize_after_gat_torch
-
-
-
 parser = argparse.ArgumentParser()
 parser.add_argument("--noisetype", type=str, default="gauss25")
 parser.add_argument('--checkpoint', type=str, default='./*.pth')
-parser.add_argument('--test_dirs', type=str, default='./dataset/validation')
-parser.add_argument('--subfold', type=str, required=True, 
-                       choices=['Confocal_FISH','Confocal_MICE','TwoPhoton_MICE'])
+parser.add_argument('--test_dirs', type=str, default='./dataset/fmdd_sub/validation')
+parser.add_argument('--subfold', type=str, required=True,
+                    choices=['Confocal_FISH', 'Confocal_MICE', 'TwoPhoton_MICE'])
 parser.add_argument('--save_test_path', type=str, default='./test')
 parser.add_argument('--log_name', type=str, default='xxx_b2u_sunet_fmdd_112rf20')
 parser.add_argument('--gpu_devices', default='0', type=str)
@@ -39,7 +35,6 @@ parser.add_argument('--parallel', action='store_true')
 parser.add_argument('--n_feature', type=int, default=48)
 parser.add_argument('--n_channel', type=int, default=1)
 parser.add_argument("--beta", type=float, default=20.0)
-
 
 opt, _ = parser.parse_known_args()
 assert opt.subfold in opt.checkpoint
@@ -60,13 +55,14 @@ util.setup_logger(
 )
 logger = logging.getLogger("test")
 
+
 def save_network(network, epoch, name):
     save_path = os.path.join(opt.save_path, opt.log_name, systime)
     os.makedirs(save_path, exist_ok=True)
     model_name = 'epoch_{}_{:03d}.pth'.format(name, epoch)
     save_path = os.path.join(save_path, model_name)
     if isinstance(network, nn.DataParallel) or isinstance(
-        network, nn.parallel.DistributedDataParallel
+            network, nn.parallel.DistributedDataParallel
     ):
         network = network.module
     state_dict = network.state_dict()
@@ -80,7 +76,7 @@ def load_network(load_path, network, strict=True):
     assert load_path is not None
     logger.info("Loading model from [{:s}] ...".format(load_path))
     if isinstance(network, nn.DataParallel) or isinstance(
-        network, nn.parallel.DistributedDataParallel
+            network, nn.parallel.DistributedDataParallel
     ):
         network = network.module
     load_net = torch.load(load_path)
@@ -175,7 +171,7 @@ class AugmentNoise(object):
 def space_to_depth(x, block_size):
     n, c, h, w = x.size()
     unfolded_x = torch.nn.functional.unfold(x, block_size, stride=block_size)
-    return unfolded_x.view(n, c * block_size**2, h // block_size,
+    return unfolded_x.view(n, c * block_size ** 2, h // block_size,
                            w // block_size)
 
 
@@ -198,32 +194,32 @@ def depth_to_space(x, block_size):
 def generate_mask(img, width=4, mask_type='random'):
     # This function generates random masks with shape (N x C x H/2 x W/2)
     n, c, h, w = img.shape
-    mask = torch.zeros(size=(n * h // width * w // width * width**2, ),
+    mask = torch.zeros(size=(n * h // width * w // width * width ** 2,),
                        dtype=torch.int64,
                        device=img.device)
     idx_list = torch.arange(
-        0, width**2, 1, dtype=torch.int64, device=img.device)
-    rd_idx = torch.zeros(size=(n * h // width * w // width, ),
+        0, width ** 2, 1, dtype=torch.int64, device=img.device)
+    rd_idx = torch.zeros(size=(n * h // width * w // width,),
                          dtype=torch.int64,
                          device=img.device)
 
     if mask_type == 'random':
         torch.randint(low=0,
                       high=len(idx_list),
-                      size=(n * h // width * w // width, ),
+                      size=(n * h // width * w // width,),
                       device=img.device,
                       generator=get_generator(device=img.device),
                       out=rd_idx)
     elif mask_type == 'batch':
         rd_idx = torch.randint(low=0,
                                high=len(idx_list),
-                               size=(n, ),
+                               size=(n,),
                                device=img.device,
                                generator=get_generator(device=img.device)).repeat(h // width * w // width)
     elif mask_type == 'all':
         rd_idx = torch.randint(low=0,
                                high=len(idx_list),
-                               size=(1, ),
+                               size=(1,),
                                device=img.device,
                                generator=get_generator(device=img.device)).repeat(n * h // width * w // width)
     elif 'fix' in mask_type:
@@ -234,15 +230,15 @@ def generate_mask(img, width=4, mask_type='random'):
 
     rd_pair_idx = idx_list[rd_idx]
     rd_pair_idx += torch.arange(start=0,
-                                end=n * h // width * w // width * width**2,
-                                step=width**2,
+                                end=n * h // width * w // width * width ** 2,
+                                step=width ** 2,
                                 dtype=torch.int64,
                                 device=img.device)
 
     mask[rd_pair_idx] = 1
 
     mask = depth_to_space(mask.type_as(img).view(
-        n, h // width, w // width, width**2).permute(0, 3, 1, 2), block_size=width).type(torch.int64)
+        n, h // width, w // width, width ** 2).permute(0, 3, 1, 2), block_size=width).type(torch.int64)
 
     return mask
 
@@ -258,15 +254,10 @@ def interpolate_mask(tensor, mask, mask_inv):
     kernel = kernel / kernel.sum()
 
     filtered_tensor = torch.nn.functional.conv2d(
-        tensor.view(n*c, 1, h, w), kernel, stride=1, padding=1)
+        tensor.view(n * c, 1, h, w), kernel, stride=1, padding=1)
 
     return filtered_tensor.view_as(tensor) * mask + tensor * mask_inv
 
-
-def get_X_hat(self, Z, output):
-    X_hat = output[:, :1] * Z + output[:, 1:]
-
-    return X_hat
 
 class Masker(object):
     def __init__(self, width=4, mode='interpolate', mask_type='all'):
@@ -294,9 +285,9 @@ class Masker(object):
 
     def train(self, img):
         n, c, h, w = img.shape
-        tensors = torch.zeros((n, self.width**2, c, h, w), device=img.device)
-        masks = torch.zeros((n, self.width**2, 1, h, w), device=img.device)
-        for i in range(self.width**2):
+        tensors = torch.zeros((n, self.width ** 2, c, h, w), device=img.device)
+        masks = torch.zeros((n, self.width ** 2, 1, h, w), device=img.device)
+        for i in range(self.width ** 2):
             x, mask = self.mask(img, mask_type='fix_{}'.format(i))
             tensors[:, i, ...] = x
             masks[:, i, ...] = mask
@@ -381,10 +372,10 @@ class DataLoader_Fmdd_sub(Dataset):
         CSize = self.patch
         rnd_h = np.random.randint(0, max(0, H - CSize))
         rnd_w = np.random.randint(0, max(0, W - CSize))
-        im_noisy = im_noisy[rnd_h : rnd_h + CSize, rnd_w : rnd_w + CSize]
+        im_noisy = im_noisy[rnd_h: rnd_h + CSize, rnd_w: rnd_w + CSize]
         im_noisy = im_noisy[np.newaxis, :, :]
 
-        im_gt = im_gt[rnd_h : rnd_h + CSize, rnd_w : rnd_w + CSize]
+        im_gt = im_gt[rnd_h: rnd_h + CSize, rnd_w: rnd_w + CSize]
         im_gt = im_gt[np.newaxis, :, :]
         # np.ndarray to torch.tensor
         im_noisy = torch.from_numpy(im_noisy)
@@ -405,7 +396,7 @@ def validation_fmdd(dataset_dir):
         im_noisy = np.array(im_noisy, dtype=np.float32)[:, :, np.newaxis]
         gt_fn = os.path.join(os.path.dirname(fn.replace('raw', 'gt')), 'avg50.png')
         im_gt = Image.open(gt_fn)
-        im_gt = np.array(im_gt, dtype=np.float32)[:, :, np.newaxis]        
+        im_gt = np.array(im_gt, dtype=np.float32)[:, :, np.newaxis]
         data_noisy.append(im_noisy)
         data_gt.append(im_gt)
     return data_noisy, data_gt
@@ -457,19 +448,19 @@ def validation_Set14(dataset_dir):
 
 
 def ssim(prediction, target):
-    C1 = (0.01 * 255)**2
-    C2 = (0.03 * 255)**2
+    C1 = (0.01 * 255) ** 2
+    C2 = (0.03 * 255) ** 2
     img1 = prediction.astype(np.float64)
     img2 = target.astype(np.float64)
     kernel = cv2.getGaussianKernel(11, 1.5)
     window = np.outer(kernel, kernel.transpose())
     mu1 = cv2.filter2D(img1, -1, window)[5:-5, 5:-5]  # valid
     mu2 = cv2.filter2D(img2, -1, window)[5:-5, 5:-5]
-    mu1_sq = mu1**2
-    mu2_sq = mu2**2
+    mu1_sq = mu1 ** 2
+    mu2_sq = mu2 ** 2
     mu1_mu2 = mu1 * mu2
-    sigma1_sq = cv2.filter2D(img1**2, -1, window)[5:-5, 5:-5] - mu1_sq
-    sigma2_sq = cv2.filter2D(img2**2, -1, window)[5:-5, 5:-5] - mu2_sq
+    sigma1_sq = cv2.filter2D(img1 ** 2, -1, window)[5:-5, 5:-5] - mu1_sq
+    sigma2_sq = cv2.filter2D(img2 ** 2, -1, window)[5:-5, 5:-5] - mu2_sq
     sigma12 = cv2.filter2D(img1 * img2, -1, window)[5:-5, 5:-5] - mu1_mu2
     ssim_map = ((2 * mu1_mu2 + C1) *
                 (2 * sigma12 + C2)) / ((mu1_sq + mu2_sq + C1) *
@@ -505,10 +496,11 @@ def calculate_psnr(target, ref, data_range=255.0):
     img1 = np.array(target, dtype=np.float32)
     img2 = np.array(ref, dtype=np.float32)
     diff = img1 - img2
-    psnr = 10.0 * np.log10(data_range**2 / np.mean(np.square(diff)))
+    psnr = 10.0 * np.log10(data_range ** 2 / np.mean(np.square(diff)))
     return psnr
 
-# # Confocal_FISH | Confocal_MICE | TwoPhoton_MICE | 
+
+# # Confocal_FISH | Confocal_MICE | TwoPhoton_MICE |
 # fold_list = ['Confocal_FISH', 'Confocal_MICE', 'TwoPhoton_MICE']
 # # Validation Set
 # Confocal_FISH_dir = os.path.join(opt.test_dirs, "Confocal_FISH")
@@ -524,14 +516,13 @@ valid_dict = {
     opt.subfold: validation_fmdd(os.path.join(opt.test_dirs, opt.subfold))
 }
 
-
 # Masker
 masker = Masker(width=4, mode='interpolate', mask_type='all')
 
 # Network
 network = UNet(in_channels=opt.n_channel,
-                out_channels=opt.n_channel,
-                wf=opt.n_feature)
+               out_channels=opt.n_channel,
+               wf=opt.n_feature)
 if opt.parallel:
     network = torch.nn.DataParallel(network)
 network = network.cuda()
@@ -564,8 +555,8 @@ for valid_name, valid_data in valid_dict.items():
         im = valid_gt[idx]
         origin255 = im.copy()
         origin255 = origin255.astype(np.uint8)
-        start = time.time()
         noisy_im = valid_noisy[idx]
+        noisy_im = np.array(noisy_im, dtype=np.float32) / 255.0
         noisy255 = noisy_im.copy() * 255.0
         noisy255 = noisy255.astype(np.uint8)
 
@@ -581,19 +572,14 @@ for valid_name, valid_data in valid_dict.items():
         noisy_im = transformer(noisy_im)
         noisy_im = torch.unsqueeze(noisy_im, 0)
         noisy_im = noisy_im.cuda()
-
-
-
         with torch.no_grad():
             n, c, h, w = noisy_im.shape
             net_input, mask = masker.train(noisy_im)
-            noisy_output = (network(net_input)*mask).view(n,-1,c,h,w).sum(dim=1)
+            noisy_output = (network(net_input) * mask).view(n, -1, c, h, w).sum(dim=1)
             exp_output = network(noisy_im)
-
-
         pred_dn = noisy_output[:, :, :H, :W]
         pred_exp = exp_output[:, :, :H, :W]
-        pred_mid = (pred_dn + beta*pred_exp) / (1 + beta)
+        pred_mid = (pred_dn + beta * pred_exp) / (1 + beta)
 
         pred_dn = pred_dn.permute(0, 2, 3, 1)
         pred_exp = pred_exp.permute(0, 2, 3, 1)
@@ -601,40 +587,40 @@ for valid_name, valid_data in valid_dict.items():
 
         pred_dn = pred_dn.cpu().data.clamp(0, 1).numpy().squeeze(0)
         pred_exp = pred_exp.cpu().data.clamp(0, 1).numpy().squeeze(0)
-        pred_mid = pred_mid.cpu().data.clamp(0, 1).numpy().squeeze(0)     
+        pred_mid = pred_mid.cpu().data.clamp(0, 1).numpy().squeeze(0)
 
         pred255_dn = np.clip(pred_dn * 255.0 + 0.5, 0,
-                            255).astype(np.uint8)
+                             255).astype(np.uint8)
         pred255_exp = np.clip(pred_exp * 255.0 + 0.5, 0,
-                            255).astype(np.uint8)
+                              255).astype(np.uint8)
         pred255_mid = np.clip(pred_mid * 255.0 + 0.5, 0,
-                            255).astype(np.uint8)                   
+                              255).astype(np.uint8)
 
         # calculate psnr
         psnr_dn = calculate_psnr(origin255.astype(np.float32),
-                                    pred255_dn.astype(np.float32))
+                                 pred255_dn.astype(np.float32))
         avg_psnr_dn.append(psnr_dn)
         ssim_dn = calculate_ssim(origin255.astype(np.float32),
-                                    pred255_dn.astype(np.float32))
+                                 pred255_dn.astype(np.float32))
         avg_ssim_dn.append(ssim_dn)
 
         psnr_exp = calculate_psnr(origin255.astype(np.float32),
-                                    pred255_exp.astype(np.float32))
+                                  pred255_exp.astype(np.float32))
         avg_psnr_exp.append(psnr_exp)
         ssim_exp = calculate_ssim(origin255.astype(np.float32),
-                                    pred255_exp.astype(np.float32))
+                                  pred255_exp.astype(np.float32))
         avg_ssim_exp.append(ssim_exp)
 
         psnr_mid = calculate_psnr(origin255.astype(np.float32),
-                                    pred255_mid.astype(np.float32))
+                                  pred255_mid.astype(np.float32))
         avg_psnr_mid.append(psnr_mid)
         ssim_mid = calculate_ssim(origin255.astype(np.float32),
-                                    pred255_mid.astype(np.float32))
+                                  pred255_mid.astype(np.float32))
         avg_ssim_mid.append(ssim_mid)
 
         logger.info(
             "{} - img:{:03d} - PSNR_DN: {:.6f} dB; SSIM_DN: {:.6f}; PSNR_EXP: {:.6f} dB; SSIM_EXP: {:.6f}; PSNR_MID: {:.6f} dB; SSIM_MID: {:.6f}.".format(
-            valid_name, idx, psnr_dn, ssim_dn, psnr_exp, ssim_exp, psnr_mid, ssim_mid
+                valid_name, idx, psnr_dn, ssim_dn, psnr_exp, ssim_exp, psnr_mid, ssim_mid
             )
         )
 
@@ -676,7 +662,7 @@ for valid_name, valid_data in valid_dict.items():
     avg_psnr_mid = np.array(avg_psnr_mid)
     avg_psnr_mid = np.mean(avg_psnr_mid)
     avg_ssim_mid = np.mean(avg_ssim_mid)
-    
+
     logger.info(
         "----Average PSNR/SSIM results for {}----\n\tPSNR_DN: {:.6f} dB; SSIM_DN: {:.6f}\n----PSNR_EXP: {:.6f} dB; SSIM_EXP: {:.6f}\n----PSNR_MID: {:.6f} dB; SSIM_MID: {:.6f}".format(
             valid_name, avg_psnr_dn, avg_ssim_dn, avg_psnr_exp, avg_ssim_exp, avg_psnr_mid, avg_ssim_mid
