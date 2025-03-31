@@ -721,7 +721,6 @@ if __name__=='__main__':
                     noisy_im = valid_noisy[idx]
                     noisy_im = np.array(noisy_im, dtype=np.float32) / 255.0
                     noisy255 = noisy_im.copy() * 255.0
-                    noisy255 = noisy_im.copy()
 
                     # padding to square
                     H = noisy_im.shape[0]
