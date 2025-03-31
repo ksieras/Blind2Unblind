@@ -37,7 +37,7 @@ parser.add_argument('--log_name', type=str, default='rawRGB_112rf20_beta19.4')
 parser.add_argument('--gpu_devices', default='0', type=str)
 parser.add_argument('--parallel', action='store_true')
 parser.add_argument('--n_feature', type=int, default=48)
-parser.add_argument('--n_channel', type=int, default=1)
+parser.add_argument('--n_channel', type=int, default=4)
 parser.add_argument("--beta", type=float, default=20.0)
 
 
@@ -571,7 +571,7 @@ for valid_name, valid_data in valid_dict.items():
         im = valid_gt[idx]
         origin255 = im.copy()
         origin255 = origin255.astype(np.uint8)
-        start = time.time()
+
         noisy_im = valid_noisy[idx]
 
         noisy_im = np.array(noisy_im, dtype=np.float32) / 255.0
@@ -599,16 +599,21 @@ for valid_name, valid_data in valid_dict.items():
         transformed, transformed_sigma, min_t, max_t = normalize_after_gat_torch(transformed)
         #---------------
         # pack raw data
-        #transformed = space_to_depth(transformed, block_size=2)
-
+        transformed = space_to_depth(transformed, block_size=2)
+        start = time.time()
         with torch.no_grad():
             n, c, h, w = transformed.shape
             net_input, mask = masker.train(transformed)
             noisy_output = (network(net_input)*mask).view(n,-1,c,h,w).sum(dim=1)
             exp_output = network(transformed)
-            #noisy_output= depth_to_space(noisy_output, block_size=2)
-            #exp_output = depth_to_space(exp_output, block_size=2)
+            noisy_output= depth_to_space(noisy_output, block_size=2)
+            exp_output = depth_to_space(exp_output, block_size=2)
         ##inverse GAT------------------
+
+        inference_time = time.time() - start
+        print('inference time:', inference_time)
+        avg_inference_time.append(inference_time)
+
         X = origin255
         original_sigma = original_sigma.cpu().detach().numpy()
         original_alpha = original_alpha.cpu().detach().numpy()
@@ -626,9 +631,7 @@ for valid_name, valid_data in valid_dict.items():
         exp_output = X_exp_hat
         #-------------------
 
-        inference_time = time.time() - start
-        print('inference time:',inference_time)
-        avg_inference_time.append(inference_time)
+
 
         pred_dn = noisy_output[:, :, :H, :W]
         pred_exp = exp_output[:, :, :H, :W]

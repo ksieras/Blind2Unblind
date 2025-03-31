@@ -406,7 +406,15 @@ class DataLoader_Fmdd_sub(Dataset):
         self.patch = patch
         print("data_dir===",data_dir)
         # self.train_fns = glob.glob(os.path.join(data_dir, '**/raw/**/**.png'), recursive=True)
-        self.train_fns = glob.glob(os.path.join(data_dir, opt.subfold, 'raw/**/**.png'), recursive=True)        
+
+        self.train_tem = glob.glob(os.path.join(data_dir, opt.subfold, 'raw'))
+        self.train_fns1 = []
+        self.train_fns = []
+        for f in os.listdir(self.train_tem[0]):
+            if '19' not in f:
+                self.train_fns1.append(os.path.join(self.train_tem[0],f))
+        for f in self.train_fns1:
+            self.train_fns.extend(glob.glob(os.path.join(f,'*.png')))
         self.train_fns.sort()
         print('fetch {} samples for training'.format(len(self.train_fns)))
 
