@@ -25,7 +25,7 @@ from collections import OrderedDict
 parser = argparse.ArgumentParser()
 parser.add_argument("--noisetype", type=str, default="gauss25")
 parser.add_argument('--checkpoint', type=str, default='./*.pth')
-parser.add_argument('--test_dirs', type=str, default='./dataset/fmdd_sub/validation')
+parser.add_argument('--test_dirs', type=str, default='E:\pythonProject\github_restore\FBI-Denoiser\data\\test')
 parser.add_argument('--subfold', type=str, required=True,
                     choices=['Confocal_FISH', 'Confocal_MICE', 'TwoPhoton_MICE'])
 parser.add_argument('--save_test_path', type=str, default='./test')
@@ -33,11 +33,11 @@ parser.add_argument('--log_name', type=str, default='xxx_b2u_sunet_fmdd_112rf20'
 parser.add_argument('--gpu_devices', default='0', type=str)
 parser.add_argument('--parallel', action='store_true')
 parser.add_argument('--n_feature', type=int, default=48)
-parser.add_argument('--n_channel', type=int, default=1)
+parser.add_argument('--n_channel', type=int, default=4)
 parser.add_argument("--beta", type=float, default=20.0)
 
 opt, _ = parser.parse_known_args()
-assert opt.subfold in opt.checkpoint
+#assert opt.subfold in opt.checkpoint
 systime = datetime.datetime.now().strftime('%Y-%m-%d-%H-%M')
 operation_seed_counter = 0
 os.environ['CUDA_VISIBLE_DEVICES'] = opt.gpu_devices
@@ -355,6 +355,8 @@ class DataLoader_Fmdd_sub(Dataset):
         self.data_dir = data_dir
         self.patch = patch
         self.train_fns = glob.glob(os.path.join(data_dir, '**/raw/**/**.png'), recursive=True)
+
+
         self.train_fns.sort()
         print('fetch {} samples for training'.format(len(self.train_fns)))
 
@@ -572,13 +574,19 @@ for valid_name, valid_data in valid_dict.items():
         noisy_im = transformer(noisy_im)
         noisy_im = torch.unsqueeze(noisy_im, 0)
         noisy_im = noisy_im.cuda()
+
+        # pack raw data
+        noisy_im = space_to_depth(noisy_im, block_size=2)
+
         inference_time = time.time()
         with torch.no_grad():
             n, c, h, w = noisy_im.shape
             net_input, mask = masker.train(noisy_im)
             noisy_output = (network(net_input) * mask).view(n, -1, c, h, w).sum(dim=1)
             exp_output = network(noisy_im)
-
+            # unpack raw data
+            noisy_output = depth_to_space(noisy_output, block_size=2)
+            exp_output = depth_to_space(exp_output, block_size=2)
         inference_time = time.time() - inference_time
         print('inference time:',inference_time)
         avg_inference_time.append(inference_time)

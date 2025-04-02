@@ -28,11 +28,11 @@ parser.add_argument('--resume', type=str)
 parser.add_argument('--checkpoint', type=str)
 parser.add_argument('--data_dir', type=str,
                     default='G:/restoration\dataset/fmdd/fmdd/fmdd')
-parser.add_argument('--val_dirs', type=str, default='./dataset/fmdd_sub/validation')
+parser.add_argument('--val_dirs', type=str, default='E:\pythonProject\github_restore\FBI-Denoiser\data\\test')
 parser.add_argument('--subfold', type=str, required=True, 
                        choices=['Confocal_FISH','Confocal_MICE','TwoPhoton_MICE'])
 parser.add_argument('--save_model_path', type=str,
-                    default='../experiments/fmdd')
+                    default='./experiments/fmdd')
 parser.add_argument('--log_name', type=str,
                     default='xxx_b2u_unet_fmdd_112rf20')
 parser.add_argument('--gpu_devices', default='0', type=str)
@@ -405,7 +405,15 @@ class DataLoader_Fmdd_sub(Dataset):
         self.patch = patch
         print("data_dir===",data_dir)
         # self.train_fns = glob.glob(os.path.join(data_dir, '**/raw/**/**.png'), recursive=True)
-        self.train_fns = glob.glob(os.path.join(data_dir, opt.subfold, 'raw/**/**.png'), recursive=True)        
+        #self.train_fns = glob.glob(os.path.join(data_dir, opt.subfold, 'raw/**/**.png'), recursive=True)
+        self.train_tem = glob.glob(os.path.join(data_dir, opt.subfold, 'raw'))
+        self.train_fns1 = []
+        self.train_fns = []
+        for f in os.listdir(self.train_tem[0]):
+            if '19' not in f:
+                self.train_fns1.append(os.path.join(self.train_tem[0], f))
+        for f in self.train_fns1:
+            self.train_fns.extend(glob.glob(os.path.join(f, '*.png')))
         self.train_fns.sort()
         print('fetch {} samples for training'.format(len(self.train_fns)))
 
@@ -636,8 +644,11 @@ if __name__=='__main__':
             noisy = noisy / 255.0
             noisy = noisy.cuda()
             noisy.requires_grad_(True)
-            optimizer.zero_grad()
 
+            # pack raw data
+            #noisy = space_to_depth(noisy, 2)
+
+            optimizer.zero_grad()
 
             net_input, mask = masker.train(noisy)
             noisy_output = network(net_input)
@@ -694,6 +705,7 @@ if __name__=='__main__':
                 avg_ssim_exp = []
                 avg_psnr_mid = []
                 avg_ssim_mid = []
+                avg_inference_time = []
                 save_dir = os.path.join(validation_path, valid_name)
                 os.makedirs(save_dir, exist_ok=True)
                 valid_noisy, valid_gt = valid_data
@@ -719,6 +731,9 @@ if __name__=='__main__':
                     noisy_im = transformer(noisy_im)
                     noisy_im = torch.unsqueeze(noisy_im, 0)
                     noisy_im = noisy_im.cuda()
+                    # pack raw data
+                    #noisy_im = space_to_depth(noisy_im, block_size=2)
+                    inference_time = time.time()
                     with torch.no_grad():
                         n, c, h, w = noisy_im.shape
                         net_input, mask = masker.train(noisy_im)
@@ -729,6 +744,11 @@ if __name__=='__main__':
                         del net_input, mask, noisy_output
                         torch.cuda.empty_cache()
                         exp_output = network(noisy_im)
+                        # unpack raw data
+                        #dn_output = depth_to_space(dn_output, block_size=2)
+                        #exp_output = depth_to_space(exp_output, block_size=2)
+                    inference_time = time.time() - inference_time
+                    avg_inference_time.append(inference_time)
                     pred_dn = dn_output[:, :, :H, :W]
                     pred_exp = exp_output.detach().clone()[:, :, :H, :W]
                     pred_mid = (pred_dn + beta*pred_exp) / (1 + beta)
@@ -818,8 +838,11 @@ if __name__=='__main__':
                 avg_psnr_mid = np.mean(avg_psnr_mid)
                 avg_ssim_mid = np.mean(avg_ssim_mid)
 
+                avg_inference_time = np.array(avg_inference_time)
+                avg_inference_time = np.mean(avg_inference_time)
+
                 log_path = os.path.join(validation_path,
                                         "A_log_{}.csv".format(valid_name))
                 with open(log_path, "a") as f:
-                    f.writelines("epoch:{},dn:{:.6f}/{:.6f},exp:{:.6f}/{:.6f},mid:{:.6f}/{:.6f}\n".format(
-                        epoch, avg_psnr_dn, avg_ssim_dn, avg_psnr_exp, avg_ssim_exp, avg_psnr_mid, avg_ssim_mid))
+                    f.writelines("epoch:{},inference_time:{}/dn:{:.6f}/{:.6f},exp:{:.6f}/{:.6f},mid:{:.6f}/{:.6f}\n".format(
+                        avg_inference_time,epoch, avg_psnr_dn, avg_ssim_dn, avg_psnr_exp, avg_ssim_exp, avg_psnr_mid, avg_ssim_mid))
