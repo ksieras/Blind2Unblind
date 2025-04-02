@@ -32,7 +32,7 @@ parser.add_argument('--log_name', type=str, default='b2u_unet_raw_112rf20')
 parser.add_argument('--gpu_devices', default='0', type=str)
 parser.add_argument('--parallel', action='store_true')
 parser.add_argument('--n_feature', type=int, default=48)
-parser.add_argument('--n_channel', type=int, default=4)
+parser.add_argument('--n_channel', type=int, default=2)
 parser.add_argument("--beta", type=float, default=20.0)
 
 opt, _ = parser.parse_known_args()

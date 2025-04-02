@@ -40,7 +40,8 @@ parser.add_argument('--log_name', type=str,
 parser.add_argument('--gpu_devices', default='0', type=str)
 parser.add_argument('--parallel', action='store_true')
 parser.add_argument('--n_feature', type=int, default=48)
-parser.add_argument('--n_channel', type=int, default=1)
+parser.add_argument('--input_channel', type=int, default=1)
+parser.add_argument('--output_channel', type=int, default=2)
 parser.add_argument('--lr', type=float, default=1e-4)
 parser.add_argument('--w_decay', type=float, default=1e-8)
 parser.add_argument('--gamma', type=float, default=0.5)
@@ -553,6 +554,25 @@ def calculate_psnr(target, ref, data_range=255.0):
     return psnr
 
 
+def emse_affine(output, target):
+    a = output[:, 0]
+    b = output[:, 1]
+
+    Z = target[:, 0]
+    sigma = target[:, 1]
+    # E[(Z - (aZ+b))**2 + 2a(sigma**2) - sigma**2]
+    loss = torch.mean((Z - (a * Z + b)) ** 2 + 2 * a * (sigma ** 2) - sigma ** 2)
+
+    return loss
+
+def get_X_hat( Z, output):
+    X_hat = output[:, :1] * Z + output[:, 1:]
+
+    return X_hat
+
+
+
+
 if __name__=='__main__':
 
     ## load PGE model---------
@@ -592,8 +612,8 @@ if __name__=='__main__':
     masker = Masker(width=4, mode='interpolate', mask_type='all')
 
     # Network
-    network = UNet(in_channels=opt.n_channel,
-                    out_channels=opt.n_channel,
+    network = UNet(in_channels=opt.input_channel,
+                    out_channels=opt.output_channel,
                     wf=opt.n_feature)
     if opt.parallel:
         network = torch.nn.DataParallel(network)
@@ -672,7 +692,7 @@ if __name__=='__main__':
             with torch.no_grad():
                 exp_output = network(transformed)
 
-            exp_diff = exp_output - noisy
+            exp_diff = exp_output - transformed
             # g25, p30: 1_1-2; frange-10
             # g5-50 | p5-50 | raw; 1_1-2; range-10
             Lambda = epoch / opt.n_epoch
@@ -684,11 +704,16 @@ if __name__=='__main__':
             else:
                 beta = increase_ratio
             alpha = Lambda1
+            #计算出最终预测的去噪图像
+            pred_mid = (exp_output + beta * exp_output) / (1 + beta)
 
             revisible = diff + beta * exp_diff
             loss_reg = alpha * torch.mean(diff**2)
             loss_rev = torch.mean(revisible**2)
-            loss_all = loss_reg + loss_rev
+            #加入噪声仿射损失
+            loss_aff = emse_affine(transformed_target,pred_mid)
+
+            loss_all = loss_reg + loss_rev + loss_aff
             loss_all.backward()
 
             optimizer.step()
@@ -766,18 +791,19 @@ if __name__=='__main__':
                     ##inverse GAT------------------
                     transformed_Z = transformed_target[:, :1]
                     X = origin255
+
                     original_sigma = original_sigma.cpu().detach().numpy()
                     original_alpha = original_alpha.cpu().detach().numpy()
                     min_t = min_t.cpu().detach().numpy()
                     max_t = max_t.cpu().detach().numpy()
 
-                    X_noisy_hat = noisy_output.cpu().detach().numpy()
+                    X_noisy_hat = get_X_hat(transformed_Z,noisy_output).cpu().detach().numpy()
                     X_noisy_hat = X_noisy_hat * (max_t - min_t) + min_t
                     X_noisy_hat = np.clip(
                         inverse_gat(X_noisy_hat, original_sigma, original_alpha, 0, method='closed_form'), 0, 1)
                     noisy_output = X_noisy_hat
 
-                    X_exp_hat = exp_output.cpu().detach().numpy()
+                    X_exp_hat = get_X_hat(transformed_Z,exp_output).cpu().detach().numpy()
                     X_exp_hat = X_exp_hat * (max_t - min_t) + min_t
                     X_exp_hat = np.clip(inverse_gat(X_exp_hat, original_sigma, original_alpha, 0, method='closed_form'),
                                         0, 1)
@@ -834,36 +860,36 @@ if __name__=='__main__':
                     avg_ssim_mid.append(ssim_mid)
 
                     # visualization
-                    save_path = os.path.join(
-                        save_dir,
-                        "{}_{:03d}-{:03d}_clean.png".format(
-                            valid_name, idx, epoch))
-                    Image.fromarray(origin255.squeeze()).save(
-                        save_path)
-                    save_path = os.path.join(
-                        save_dir,
-                        "{}_{:03d}-{:03d}_noisy.png".format(
-                            valid_name, idx, epoch))
-                    Image.fromarray(noisy255.squeeze()).save(
-                        save_path)
-                    save_path = os.path.join(
-                        save_dir,
-                        "{}_{:03d}-{:03d}_dn_{:.6f}-{:.6f}.png".format(
-                            valid_name, idx, epoch, psnr_dn, ssim_dn))
-                    Image.fromarray(pred255_dn.squeeze()).save(
-                            save_path)
-                    save_path = os.path.join(
-                        save_dir,
-                        "{}_{:03d}-{:03d}_exp_{:.6f}-{:.6f}.png".format(
-                            valid_name, idx, epoch, psnr_exp, ssim_exp))
-                    Image.fromarray(pred255_exp.squeeze()).save(
-                            save_path)
-                    save_path = os.path.join(
-                        save_dir,
-                        "{}_{:03d}-{:03d}_mid_{:.6f}-{:.6f}.png".format(
-                            valid_name, idx, epoch, psnr_mid, ssim_mid))
-                    Image.fromarray(pred255_mid.squeeze()).save(
-                            save_path)
+                    # save_path = os.path.join(
+                    #     save_dir,
+                    #     "{}_{:03d}-{:03d}_clean.png".format(
+                    #         valid_name, idx, epoch))
+                    # Image.fromarray(origin255.squeeze()).save(
+                    #     save_path)
+                    # save_path = os.path.join(
+                    #     save_dir,
+                    #     "{}_{:03d}-{:03d}_noisy.png".format(
+                    #         valid_name, idx, epoch))
+                    # Image.fromarray(noisy255.squeeze()).save(
+                    #     save_path)
+                    # save_path = os.path.join(
+                    #     save_dir,
+                    #     "{}_{:03d}-{:03d}_dn_{:.6f}-{:.6f}.png".format(
+                    #         valid_name, idx, epoch, psnr_dn, ssim_dn))
+                    # Image.fromarray(pred255_dn.squeeze()).save(
+                    #         save_path)
+                    # save_path = os.path.join(
+                    #     save_dir,
+                    #     "{}_{:03d}-{:03d}_exp_{:.6f}-{:.6f}.png".format(
+                    #         valid_name, idx, epoch, psnr_exp, ssim_exp))
+                    # Image.fromarray(pred255_exp.squeeze()).save(
+                    #         save_path)
+                    # save_path = os.path.join(
+                    #     save_dir,
+                    #     "{}_{:03d}-{:03d}_mid_{:.6f}-{:.6f}.png".format(
+                    #         valid_name, idx, epoch, psnr_mid, ssim_mid))
+                    # Image.fromarray(pred255_mid.squeeze()).save(
+                    #         save_path)
 
                 avg_psnr_dn = np.array(avg_psnr_dn)
                 avg_psnr_dn = np.mean(avg_psnr_dn)
