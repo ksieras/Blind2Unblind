@@ -27,7 +27,7 @@ parser.add_argument("--noisetype", type=str, default="gauss25", choices=['gauss2
 parser.add_argument('--resume', type=str)
 parser.add_argument('--checkpoint', type=str)
 parser.add_argument('--data_dir', type=str,
-                    default='G:/restoration\dataset/fmdd/fmdd/fmdd')
+                    default='F:\\restoration\dataset\\fmdd\\fmdd\\fmdd') #F:\restoration\dataset\fmdd\fmdd\fmdd
 parser.add_argument('--val_dirs', type=str, default='E:\pythonProject\github_restore\FBI-Denoiser\data\\test')
 parser.add_argument('--subfold', type=str, required=True, 
                        choices=['Confocal_FISH','Confocal_MICE','TwoPhoton_MICE'])
@@ -677,6 +677,22 @@ if __name__=='__main__':
             loss_rev = torch.mean(revisible**2)
             loss_all = loss_reg + loss_rev
             loss_all.backward()
+
+            # # 异常梯度修复-----
+            # # 提取各层梯度均值（需先执行反向传播）
+            # gradients = [param.grad.abs().mean().item() for param in network.parameters()]
+            # # 打印突变量级变化的相邻层
+            # for i in range(1, len(gradients)):
+            #     ratio = gradients[i] / (gradients[i - 1] + 1e-10)
+            #     if ratio > 100 or ratio < 0.01:
+            #         print(f"异常层索引: {i - 1}→{i}，梯度变化倍率: {ratio:.1f}")
+            # grad_means = [param.grad.abs().mean().item() for param in network.parameters()]
+            # plt.plot(grad_means, marker='o')
+            # plt.xlabel('Layer Depth')
+            # plt.ylabel('Gradient Mean')
+            # plt.title('Gradient Distribution Across Layers')
+            # plt.show()
+
 
             optimizer.step()
             logger.info(
