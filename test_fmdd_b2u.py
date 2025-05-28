@@ -33,7 +33,7 @@ parser.add_argument('--log_name', type=str, default='xxx_b2u_sunet_fmdd_112rf20'
 parser.add_argument('--gpu_devices', default='0', type=str)
 parser.add_argument('--parallel', action='store_true')
 parser.add_argument('--n_feature', type=int, default=48)
-parser.add_argument('--n_channel', type=int, default=1)
+parser.add_argument('--n_channel', type=int, default=4)
 parser.add_argument("--beta", type=float, default=20.0)
 
 opt, _ = parser.parse_known_args()
@@ -576,7 +576,7 @@ for valid_name, valid_data in valid_dict.items():
         noisy_im = noisy_im.cuda()
 
         # pack raw data
-        #noisy_im = space_to_depth(noisy_im, block_size=2)
+        noisy_im = space_to_depth(noisy_im, block_size=2)
 
         inference_time = time.time()
         with torch.no_grad():
@@ -585,8 +585,8 @@ for valid_name, valid_data in valid_dict.items():
             noisy_output = (network(net_input) * mask).view(n, -1, c, h, w).sum(dim=1)
             exp_output = network(noisy_im)
             # unpack raw data
-            #noisy_output = depth_to_space(noisy_output, block_size=2)
-            #exp_output = depth_to_space(exp_output, block_size=2)
+            noisy_output = depth_to_space(noisy_output, block_size=2)
+            exp_output = depth_to_space(exp_output, block_size=2)
         inference_time = time.time() - inference_time
         print('inference time:',inference_time)
         avg_inference_time.append(inference_time)
