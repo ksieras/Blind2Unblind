@@ -55,7 +55,7 @@ class LR(nn.Module):
         block.append(nn.Conv2d(in_size, out_size,
                      kernel_size=ksize, padding=ksize//2, bias=True))
 
-        block.append(nn.GroupNorm(8, out_size))
+        #block.append(nn.GroupNorm(8, out_size))
 
         block.append(nn.LeakyReLU(slope, inplace=True))
 
