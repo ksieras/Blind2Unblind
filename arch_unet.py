@@ -6,7 +6,7 @@ import torch.nn.functional as F
 
 
 class UNet(nn.Module):
-    def __init__(self, in_channels=3, out_channels=3, depth=5, wf=48, slope=0.1):
+    def __init__(self, in_channels=1, out_channels=1, depth=5, wf=48, slope=0.1):
         """
         Args:
             in_channels (int): number of input channels, Default 3
@@ -55,7 +55,7 @@ class LR(nn.Module):
         block.append(nn.Conv2d(in_size, out_size,
                      kernel_size=ksize, padding=ksize//2, bias=True))
 
-        #block.append(nn.GroupNorm(8, out_size))
+
 
         block.append(nn.LeakyReLU(slope, inplace=True))
 
