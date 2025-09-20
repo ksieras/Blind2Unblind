@@ -136,3 +136,32 @@ python benchmark_sidd_b2u.py --checkpoint ./pretrained_models/rawRGB_112rf20_bet
     ```shell
     python test_fmdd_b2u.py --checkpoint ./pretrained_models/TwoPhoton_MICE_112rf20_beta20.pth --test_dirs ./dataset/fmdd_sub/validation --subfold TwoPhoton_MICE --save_test_path ./test --log_name TwoPhoton_MICE_b2u_unet_fmdd_112rf20 --beta 20.0
     ```
+
+## Go Redis Watchdog
+
+This repository also includes a Go-based Redis watchdog implementation for process monitoring. The watchdog periodically refreshes a key in Redis to indicate that a process is alive.
+
+### Features
+- Redis-based process heartbeat monitoring
+- Configurable refresh intervals and timeouts
+- Automatic retry and reconnection logic
+- Comprehensive logging and error handling
+- Graceful start/stop mechanisms
+
+### Quick Start
+
+```shell
+# Navigate to the watchdog directory
+cd watchdog
+
+# Install dependencies
+go mod tidy
+
+# Build the demo application
+go build -o bin/watchdog-demo ./cmd/demo
+
+# Run the demonstration
+./bin/watchdog-demo
+```
+
+For detailed documentation, see [`watchdog/README.md`](watchdog/README.md).
